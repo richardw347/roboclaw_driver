@@ -1,0 +1,10 @@
+<launch>
+   <node name="roboclaw_driver" pkg="roboclaw_driver" type="roboclaw_driver" output="screen">
+		<param name="port" value="/dev/ttyUSB0" />
+		<param name="baud" value="38400" />
+		<param name="rate" value="30" />
+		<param name="base_width" value="0.195" />
+		<param name="ticks_per_metre" value="165.786" />
+		<param name="base_frame_id" value="base_link" />	
+   </node>
+</launch>
