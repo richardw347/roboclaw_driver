@@ -276,37 +276,16 @@ private:
 
 
 int main(int argc, char **argv){
-	
 	ros::init(argc, argv, "roboclaw_driver");
-    RoboclawNode node;
-    node.spin();
-    /*ros::Time::init();
-    ROS_INFO_STREAM("starting node");
-    Roboclaw myclaw(std::string("/dev/ttyUSB0"), 38400, address);
-    ROS_INFO_STREAM("version: " << myclaw.ReadVersion());
-    uint8_t status;
-    bool valid;
-    myclaw.SetM1VelocityPID(0.25,0.1,0.5,850);
-    myclaw.SetM2VelocityPID(0.25,0.1,0.5,850);
-
-    ROS_INFO_STREAM("battery: " << (float)myclaw.ReadMainBatteryVoltage(valid)/10);
-    uint16_t temp;
-    myclaw.ReadTemperature(temp);
-
-    ROS_INFO_STREAM("temp: " << (float)temp/10.0);
-    ROS_INFO_STREAM("m1m2 encoder: " << myclaw.ReadEncoderM1(status, valid) << " " << myclaw.ReadEncoderM2(status, valid));
-
-    myclaw.SetMixedSpeed(500, 500);
-    uint8_t current1, current2;
-    if (myclaw.ReadCurrents(current1, current2)){
-        ROS_INFO_STREAM("m1m2 currents: " << current1 << " " << current2);
+    try{
+        RoboclawNode node;
+        node.spin();
+    } catch(const boost::system::system_error& ex){
+        ROS_ERROR_STREAM("IO error " << ex.what());
+        return -1;
+    } catch (std::exception &ex){
+        ROS_ERROR_STREAM("General error " << ex.what());
+        return -1;
     }
-
-    ros::Duration time(0.5);
-    time.sleep();
-    ROS_INFO_STREAM("m1m2 encoder: " << myclaw.ReadSpeedM1(status, valid) << " " << myclaw.ReadSpeedM2(status, valid));
-    time.sleep();
-    myclaw.SetMixedSpeed(0, 0);*/
-
-
+    return 0;
 }
