@@ -111,13 +111,12 @@ int32_t Roboclaw::ReadSpeedM2(uint8_t &status, bool &valid){
     return (int32_t) Read4_1(uint8_t(GETM2SPEED), &status, &valid);
 }
 
-bool Roboclaw::ReadTemperature(uint16_t &temp){
-    bool valid;
-    temp = Read2(uint8_t(GETTEMP),&valid);
-    return valid;
+uint16_t Roboclaw::ReadTemperature(bool &valid){
+    uint16_t temp = Read2(uint8_t(GETTEMP),&valid);
+    return temp;
 }
 
-int8_t Roboclaw::ReadErrorState(bool *valid){
+int8_t Roboclaw::ReadErrorState(bool &valid){
     uint8_t crc;
     write(_address);
     crc=_address;
@@ -128,7 +127,7 @@ int8_t Roboclaw::ReadErrorState(bool *valid){
     crc+=value;
 
     if(valid)
-        *valid = ((crc&0x7F)==read());
+        valid = ((crc&0x7F)==read());
     else
         read();
 
@@ -163,16 +162,33 @@ int32_t Roboclaw::ReadMainBatteryVoltage(bool &valid){
     return value;
 }
 
-bool Roboclaw::ReadCurrents(uint8_t &current1, uint8_t &current2){
-    bool valid;
-    uint16_t value = Read2(GETCURRENTS,&valid);
-    if(valid){
-        current1 = value>>8;
-        current2 = value;
+bool Roboclaw::ReadCurrents(uint16_t &current1, uint16_t &current2){
+
+    uint8_t crc=0;
+    write(_address);
+    crc+=_address;
+    write(uint8_t(GETCURRENTS));
+    crc+=uint8_t(GETCURRENTS);
+
+    uint8_t data = read();
+    crc+=data;
+    current1=(uint16_t)data<<8;
+    data = read();
+    crc+=data;
+    current1|=(uint16_t)data;
+
+    data = read();
+    crc+=data;
+    current2=(uint16_t)data<<8;
+    data = read();
+    crc+=data;
+    current2|=(uint16_t)data;
+
+    data = read();
+    if ((crc&0x7F)==data){
+        return true;
     }
-    current1 = value>>8;
-    current2 = value;
-    return true;
+    return false;
 }
 
 

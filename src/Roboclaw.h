@@ -77,6 +77,8 @@ class Roboclaw{
 			WRITENVM = 94};	
 
 
+
+
 public:
     Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=500);
     ~Roboclaw();
@@ -86,13 +88,22 @@ public:
     int32_t ReadSpeedM1(uint8_t &status, bool &valid);
     int32_t ReadSpeedM2(uint8_t &status, bool &valid);
     int32_t ReadMainBatteryVoltage(bool &valid);
-    bool ReadTemperature(uint16_t &temp);
-    int8_t ReadErrorState(bool *valid);
-    bool ReadCurrents(uint8_t &current1, uint8_t &current2);
+    uint16_t ReadTemperature(bool &valid);
+    int8_t ReadErrorState(bool &valid);
+    bool ReadCurrents(uint16_t &current1, uint16_t &current2);
     void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
     void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
     void SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed);
     void ResetEncoders();
+
+    enum ErrorCodes {ERR_M1_CURRENT = 1,
+                     ERR_M2_CURRENT = 2,
+                     ERR_E_STOP = 4,
+                     ERR_TEMP = 8,
+                     ERR_MAIN_BATT_HIGH = 10,
+                     ERR_MAIN_BATT_LOW = 32,
+                     ERR_LOGIC_BATT_HIGH = 64,
+                     ERR_LOGIC_BATT_LOW = 128};
 
 private:
     boost::asio::io_service _io;

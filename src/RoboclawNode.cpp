@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <numeric>
 #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
@@ -139,6 +140,79 @@ public:
 
     }
 
+    void updateDiagnostics(){
+        last_diag = ros::Time::now();
+        int error = -1;
+        bool valid = false;
+        error = claw->ReadErrorState(valid);
+        std::vector<std::string> messages;
+        diagnostic_msgs::DiagnosticArray diag_array;
+        diag_array.header.stamp = ros::Time::now();
+        if (valid && error != 0){
+            // parse the error string
+            if ((error & Roboclaw::ERR_M1_CURRENT) == Roboclaw::ERR_M1_CURRENT)
+                messages.push_back("Motor1 OverCurrent");
+            else if ((error & Roboclaw::ERR_M2_CURRENT) == Roboclaw::ERR_M2_CURRENT)
+                messages.push_back("Motor2 OverCurrent");
+            else if ((error & Roboclaw::ERR_E_STOP) == Roboclaw::ERR_E_STOP)
+                messages.push_back("Emergency Stop");
+            else if ((error & Roboclaw::ERR_TEMP) == Roboclaw::ERR_TEMP)
+                messages.push_back("Temperature");
+            else if ((error & Roboclaw::ERR_MAIN_BATT_HIGH) == Roboclaw::ERR_MAIN_BATT_HIGH)
+                messages.push_back("Main Battery High");
+            else if ((error & Roboclaw::ERR_MAIN_BATT_LOW) == Roboclaw::ERR_MAIN_BATT_LOW)
+                messages.push_back("Main Battery Low");
+            else if ((error & Roboclaw::ERR_LOGIC_BATT_HIGH) == Roboclaw::ERR_LOGIC_BATT_HIGH)
+                messages.push_back("Logic Battery High");
+            else if ((error & Roboclaw::ERR_LOGIC_BATT_HIGH) == Roboclaw::ERR_LOGIC_BATT_HIGH)
+                messages.push_back("Logic Battery Low");
+
+            diagnostic_msgs::DiagnosticStatus stat;
+            stat.name = "Roboclaw";
+            stat.hardware_id = roboclaw_version;
+            stat.level = stat.ERROR;
+            stat.message = std::accumulate(messages.begin(), messages.end(), std::string(""));
+            diag_array.status.push_back(stat);
+            diag_pub.publish(diag_array);
+        } else {
+            bool valid = true;
+            uint16_t m1cur, m2cur;
+            double temp, battery = 1;
+            diagnostic_msgs::DiagnosticStatus stat;
+            stat.name = "Roboclaw";
+            stat.hardware_id = roboclaw_version;
+            stat.level = stat.OK;
+            stat.message = "Running";
+            temp = claw->ReadTemperature(valid);
+            if (valid){
+                diagnostic_msgs::KeyValue kv;
+                kv.key = "Temperature (Degrees C)";
+                kv.value = boost::lexical_cast<std::string>((double)temp/10.0);
+                stat.values.push_back(kv);
+            }
+            battery = claw->ReadMainBatteryVoltage(valid);
+            if (valid){
+                diagnostic_msgs::KeyValue kv;
+                kv.key = "Voltage (V)";
+                kv.value = boost::lexical_cast<std::string>((double)battery/10.0);
+                stat.values.push_back(kv);
+            }
+            if (claw->ReadCurrents(m1cur, m2cur)){
+                diagnostic_msgs::KeyValue kv;
+                kv.key = "Motor1 Current (A)";
+                kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
+                stat.values.push_back(kv);
+
+                kv.key = "Motor2 Current (A)";
+                kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
+                stat.values.push_back(kv);
+            }
+            diag_array.status.push_back(stat);
+            diag_pub.publish(diag_array);
+        }
+
+    }
+
     void twistCb(geometry_msgs::Twist msg){
         last_motor = ros::Time::now();
         double lin = msg.linear.x;
@@ -160,6 +234,9 @@ public:
         while (ros::ok()){
             ros::spinOnce();
             this->upateOdom();
+            if (ros::Time::now() > (last_diag + ros::Duration(1.0))){
+                this->updateDiagnostics();
+            }
             r.sleep();
         }
         this->shutdown();
