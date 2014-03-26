@@ -93,7 +93,7 @@ public:
     bool ReadCurrents(uint16_t &current1, uint16_t &current2);
     void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
     void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
-    void SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed);
+    void SetMixedSpeed(int32_t m1_speed, int32_t m2_speed);
     void ResetEncoders();
 
     enum ErrorCodes {ERR_M1_CURRENT = 1,

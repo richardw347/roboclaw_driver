@@ -34,7 +34,7 @@ std::string Roboclaw::ReadVersion(){
                 return std::string("NULL");
 		}
 	}
-	return false;
+	return std::string("NULL");
 }
 
 uint16_t Roboclaw::Read2(uint8_t cmd,bool *valid){
@@ -235,7 +235,7 @@ void Roboclaw::SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t 
     write(crc&0x7F);
 }
 
-void Roboclaw::SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed){
+void Roboclaw::SetMixedSpeed(int32_t m1_speed, int32_t m2_speed){
 
     uint8_t crc=0;
 
