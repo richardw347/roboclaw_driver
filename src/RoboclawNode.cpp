@@ -237,6 +237,9 @@ public:
             if (ros::Time::now() > (last_diag + ros::Duration(1.0))){
                 this->updateDiagnostics();
             }
+            if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
+                claw->SetMixedSpeed(0,0);
+            }
             r.sleep();
         }
         this->shutdown();
