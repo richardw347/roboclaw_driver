@@ -129,6 +129,7 @@ public:
         br.sendTransform(tf::StampedTransform(transform, now, "odom", base_frame_id));
 
         odom.header.stamp = now;
+        odom.header.frame_id = "odom";
         odom.pose.pose.position.x = x;
         odom.pose.pose.position.y = y;
         odom.pose.pose.orientation.x = odom.pose.pose.orientation.y = 0;
