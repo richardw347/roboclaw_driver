@@ -4,7 +4,6 @@ Roboclaw::Roboclaw(const std::string port, int baud_rate, uint8_t address, int t
     _io(),
     _port(port),
     _serial(_io){
-
     _address = address;
     _timeout = timeout;
     _serial.open(_port);

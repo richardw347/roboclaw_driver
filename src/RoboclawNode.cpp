@@ -8,23 +8,22 @@
 
 #define address 0x80
 
-
 class RoboclawNode{
 public:
     RoboclawNode(): nh(), priv_nh("~"){
-        priv_nh.param<std::string>("port", port, "/dev/ttyACM0");
-        priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_link");
+        priv_nh.param<std::string>("port", port, "/dev/roboclaw");
+        priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_footprint");
         if(!priv_nh.getParam("baud_rate", baud_rate)){
-            baud_rate = 38400;
+            baud_rate = 1000000;
         }
         if(!priv_nh.getParam("rate", update_rate)){
-            baud_rate = 30;
+            update_rate = 30;
         }
         if(!priv_nh.getParam("base_width", base_width)){
-            baud_rate = 0.5;
+            base_width = 0.265;
         }
         if(!priv_nh.getParam("ticks_per_metre", ticks_per_m)){
-            baud_rate = 100;
+            ticks_per_m = 21738;
         }
         if(!priv_nh.getParam("KP", KP)){
             KP = 0.1;
@@ -36,7 +35,7 @@ public:
             KD = 0.25;
         }
         if(!priv_nh.getParam("QPPS", QPPS)){
-            QPPS = 1000;
+            QPPS = 11600;
         }
 
         ROS_INFO_STREAM("Starting roboclaw node with params:");
@@ -61,7 +60,7 @@ public:
         odom.child_frame_id = base_frame_id;
         odom.pose.pose.position.z = 0.0;
 
-        cmd_vel_sub = nh.subscribe("cmd_vel", 10, &RoboclawNode::twistCb, this);
+        cmd_vel_sub = nh.subscribe("cmd_vel", 1, &RoboclawNode::twistCb, this);
         diag_pub = nh.advertise<diagnostic_msgs::DiagnosticArray>("diagnostics", 10);
         odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
 
@@ -220,10 +219,10 @@ public:
         double ang = msg.angular.z;
         double left = 1.0 * lin - ang * base_width / 2.0;
         double right = 1.0 * lin + ang * base_width / 2.0;
-        left *= ticks_per_m;
-        right *= ticks_per_m;
-
-        claw->SetMixedSpeed(left, right);
+        int32_t left_qpps = left * ticks_per_m;
+        int32_t right_qpps = right * ticks_per_m;
+        claw->SetMixedSpeed(left_qpps, right_qpps);
+        ros::Duration(0.05).sleep();
     }
 
     void shutdown(){
@@ -235,7 +234,7 @@ public:
         while (ros::ok()){
             ros::spinOnce();
             this->upateOdom();
-            if (ros::Time::now() > (last_diag + ros::Duration(1.0))){
+            if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
                 this->updateDiagnostics();
             }
             if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
