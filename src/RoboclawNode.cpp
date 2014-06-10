@@ -39,7 +39,9 @@ public:
         }
 
         ROS_INFO_STREAM("Starting roboclaw node with params:");
-        ROS_INFO_STREAM("Base Width:\t" << base_width);
+        ROS_INFO_STREAM("Port:\t" << port);
+	ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
+	ROS_INFO_STREAM("Base Width:\t" << base_width);
         ROS_INFO_STREAM("Ticks Per Metre:\t" << ticks_per_m);
         ROS_INFO_STREAM("KP:\t" << KP);
         ROS_INFO_STREAM("KI:\t" << KI);
