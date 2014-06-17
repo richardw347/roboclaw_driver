@@ -3,7 +3,11 @@
 #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
+#include <sensor_msgs/JointState.h>
 #include <diagnostic_msgs/DiagnosticArray.h>
+#include <std_srvs/Empty.h>
+#include <std_srvs/EmptyRequest.h>
+#include <std_srvs/EmptyResponse.h>
 #include "Roboclaw.h"
 
 #define address 0x80
@@ -40,8 +44,8 @@ public:
 
         ROS_INFO_STREAM("Starting roboclaw node with params:");
         ROS_INFO_STREAM("Port:\t" << port);
-	ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
-	ROS_INFO_STREAM("Base Width:\t" << base_width);
+        ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
+        ROS_INFO_STREAM("Base Width:\t" << base_width);
         ROS_INFO_STREAM("Ticks Per Metre:\t" << ticks_per_m);
         ROS_INFO_STREAM("KP:\t" << KP);
         ROS_INFO_STREAM("KI:\t" << KI);
@@ -65,6 +69,7 @@ public:
         cmd_vel_sub = nh.subscribe("cmd_vel", 1, &RoboclawNode::twistCb, this);
         diag_pub = nh.advertise<diagnostic_msgs::DiagnosticArray>("diagnostics", 10);
         odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
+        joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 10);
 
         claw->SetM1VelocityPID(KD,KP,KI,QPPS);
         claw->SetM2VelocityPID(KD,KP,KI,QPPS);
@@ -73,7 +78,33 @@ public:
         roboclaw_version = claw->ReadVersion();
 
         ROS_INFO_STREAM("Connected to: " << roboclaw_version);
-   }
+
+        js.name.push_back("base_l_wheel_joint");
+        js.name.push_back("base_r_wheel_joint");
+        js.position.push_back(0.0);
+        js.position.push_back(0.0);
+        js.effort.push_back(0.0);
+        js.effort.push_back(0.0);
+        js.header.frame_id = "base_link";
+
+        calib_server = nh.advertiseService("motor_calibrate", &RoboclawNode::calib_callback, this);
+
+    }
+
+    bool calib_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response){
+        ROS_INFO_STREAM("calibrating motors");
+        ros::Duration wait(0.7);
+        geometry_msgs::Twist calib;
+        calib.angular.z = 0.2;
+        this->twistCb(calib);
+        wait.sleep();
+        calib.angular.z = -0.2;
+        this->twistCb(calib);
+        wait.sleep();
+        calib.angular.z = 0.0;
+        this->twistCb(calib);
+        return true;
+    }
 
     void upateOdom(){
 
@@ -139,6 +170,9 @@ public:
         odom.twist.twist.linear.x = vx;
         odom.twist.twist.angular.z = vth;
         odom_pub.publish(odom);
+
+        js.header.stamp = ros::Time::now();
+        joint_pub.publish(js);
 
     }
 
@@ -251,7 +285,7 @@ public:
 private:
     ros::NodeHandle nh, priv_nh;
     ros::Subscriber cmd_vel_sub;
-    ros::Publisher odom_pub, diag_pub;
+    ros::Publisher odom_pub, diag_pub, joint_pub;
     std::string port;
     int baud_rate;
     int update_rate;
@@ -277,11 +311,15 @@ private:
 
     tf::TransformBroadcaster br;
 
+    sensor_msgs::JointState js;
+
+    ros::ServiceServer calib_server;
+
 };
 
 
 int main(int argc, char **argv){
-	ros::init(argc, argv, "roboclaw_driver");
+    ros::init(argc, argv, "roboclaw_driver");
     try{
         RoboclawNode node;
         node.spin();
