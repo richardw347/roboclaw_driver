@@ -93,7 +93,7 @@ public:
 
     bool calib_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response){
         ROS_INFO_STREAM("calibrating motors");
-        ros::Duration wait(0.7);
+        ros::Duration wait(1.0);
         geometry_msgs::Twist calib;
         calib.angular.z = 0.2;
         this->twistCb(calib);
@@ -107,7 +107,7 @@ public:
     }
 
     void upateOdom(){
-
+	//ROS_INFO_STREAM("updating odom");
         // calcuate time elapsed since last update
         ros::Time now = ros::Time::now();
         ros::Duration elapsed_t = now - last_odom;
@@ -171,12 +171,13 @@ public:
         odom.twist.twist.angular.z = vth;
         odom_pub.publish(odom);
 
-        js.header.stamp = ros::Time::now();
-        joint_pub.publish(js);
-
+	js.header.stamp = ros::Time::now();
+	joint_pub.publish(js);
+	//ROS_INFO_STREAM("odom updated");
     }
 
     void updateDiagnostics(){
+	//ROS_INFO_STREAM("updating diags");
         last_diag = ros::Time::now();
         int error = -1;
         bool valid = false;
@@ -245,6 +246,7 @@ public:
             }
             diag_array.status.push_back(stat);
             diag_pub.publish(diag_array);
+	    //ROS_INFO_STREAM("diag updating");
         }
 
     }
@@ -302,17 +304,12 @@ private:
     double x, y, theta;
     long last_enc_left, last_enc_right;
     ros::Time last_odom;
-
     nav_msgs::Odometry odom;
     geometry_msgs::Quaternion quaternion;
-
     ros::Time last_diag;
     std::string roboclaw_version;
-
     tf::TransformBroadcaster br;
-
     sensor_msgs::JointState js;
-
     ros::ServiceServer calib_server;
 
 };

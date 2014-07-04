@@ -80,7 +80,7 @@ class Roboclaw{
 
 
 public:
-    Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=500);
+    Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=100);
     ~Roboclaw();
     std::string ReadVersion();
     int32_t ReadEncoderM1(uint8_t &status, bool &valid);
