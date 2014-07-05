@@ -8,6 +8,8 @@ find_package(catkin REQUIRED COMPONENTS roscpp diagnostic_msgs geometry_msgs nav
 catkin_package()
 
 set(SOURCE_FILES
+    ${PROJECT_SOURCE_DIR}/src/TimeoutSerial.h
+    ${PROJECT_SOURCE_DIR}/src/TimeoutSerial.cpp
     ${PROJECT_SOURCE_DIR}/src/Roboclaw.h
     ${PROJECT_SOURCE_DIR}/src/Roboclaw.cpp
     ${PROJECT_SOURCE_DIR}/src/RoboclawNode.cpp

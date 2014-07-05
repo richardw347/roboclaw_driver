@@ -114,7 +114,7 @@ public:
         last_odom = now;
         double elapsed = elapsed_t.toSec();
 
-        uint8_t status;
+        char status;
         bool valid1, valid2;
 
         // read the encoder counts
