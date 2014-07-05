@@ -83,7 +83,7 @@ class Roboclaw{
 
 
 public:
-    Roboclaw(const std::string port, int baud_rate, char address, int timeout=100);
+    Roboclaw(const std::string port, int baud_rate, char address, int timeout=5);
     ~Roboclaw();
     std::string ReadVersion() throw(boost::system::system_error);
     int32_t ReadEncoderM1(char &status, bool &valid) throw(boost::system::system_error);
