@@ -45,21 +45,21 @@ std::string Roboclaw::ReadVersion() throw(boost::system::system_error){
 	return std::string("NULL");
 }
 
-int16_t Roboclaw::Read2(char cmd,bool *valid) throw(boost::system::system_error){
+uint16_t Roboclaw::Read2(char cmd,bool *valid) throw(boost::system::system_error){
     char crc;
     write(_address);
     crc=_address;
     write(cmd);
     crc+=cmd;
 
-    int16_t value;
-    char data = read();
+    uint16_t value;
+    uint8_t data = (uint8_t)read();
     crc+=data;
-    value=(int16_t)data<<8;
+    value=(uint16_t)data<<8;
 
-    data = read();
+    data = (uint8_t)read();
     crc+=data;
-    value|=(int16_t)data;
+    value|=(uint16_t)data;
 
     data = read();
     if(valid)
@@ -68,7 +68,7 @@ int16_t Roboclaw::Read2(char cmd,bool *valid) throw(boost::system::system_error)
     return value;
 }
 
-int32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid) throw(boost::system::system_error){
+uint32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid) throw(boost::system::system_error){
     char crc;
     write(_address);
     crc=_address;
@@ -119,8 +119,8 @@ int32_t Roboclaw::ReadSpeedM2(char &status, bool &valid) throw(boost::system::sy
     return (int32_t) Read4_1(char(GETM2SPEED), &status, &valid);
 }
 
-int16_t Roboclaw::ReadTemperature(bool &valid) throw(boost::system::system_error){
-    int16_t temp = Read2(char(GETTEMP),&valid);
+uint16_t Roboclaw::ReadTemperature(bool &valid) throw(boost::system::system_error){
+    uint16_t temp = Read2(char(GETTEMP),&valid);
     return temp;
 }
 
@@ -170,7 +170,7 @@ int32_t Roboclaw::ReadMainBatteryVoltage(bool &valid) throw(boost::system::syste
     return value;
 }
 
-bool Roboclaw::ReadCurrents(int16_t &current1, int16_t &current2) throw(boost::system::system_error){
+bool Roboclaw::ReadCurrents(uint16_t &current1, uint16_t &current2) throw(boost::system::system_error){
 
     char crc=0;
     write(_address);
@@ -259,7 +259,7 @@ void Roboclaw::SetMixedSpeed(int32_t m1_speed, int32_t m2_speed) throw(boost::sy
     write(crc&0x7F);
 }
 
-void Roboclaw::write_32(char& crc, int32_t val) throw(boost::system::system_error){
+void Roboclaw::write_32( char& crc, uint32_t val) throw(boost::system::system_error){
 
     crc+=(char)(val>>24);
     crc+=(char)(val>>16);

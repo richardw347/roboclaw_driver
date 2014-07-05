@@ -91,9 +91,9 @@ public:
     int32_t ReadSpeedM1(char &status, bool &valid) throw(boost::system::system_error);
     int32_t ReadSpeedM2(char &status, bool &valid) throw(boost::system::system_error);
     int32_t ReadMainBatteryVoltage(bool &valid) throw(boost::system::system_error);
-    int16_t ReadTemperature(bool &valid) throw(boost::system::system_error);
+    uint16_t ReadTemperature(bool &valid) throw(boost::system::system_error);
     int8_t ReadErrorState(bool &valid) throw(boost::system::system_error);
-    bool ReadCurrents(int16_t &current1, int16_t &current2) throw(boost::system::system_error);
+    bool ReadCurrents(uint16_t &current1, uint16_t &current2) throw(boost::system::system_error);
     void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error);
     void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error);
     void SetMixedSpeed(int32_t m1_speed, int32_t m2_speed) throw(boost::system::system_error);
@@ -116,9 +116,9 @@ private:
     int _timeout;
     char _address;
 
-    void write_32(char &crc, int32_t val) throw(boost::system::system_error);
-    int16_t Read2(char cmd,bool *valid) throw(boost::system::system_error);
-    int32_t Read4_1(char cmd, char *status, bool *valid) throw(boost::system::system_error);
+    void write_32(char &crc, uint32_t val) throw(boost::system::system_error);
+    uint16_t Read2(char cmd,bool *valid) throw(boost::system::system_error);
+    uint32_t Read4_1(char cmd, char *status, bool *valid) throw(boost::system::system_error);
     void write(char c)throw(boost::system::system_error);
     char read() throw(boost::system::system_error);
 };

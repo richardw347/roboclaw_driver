@@ -213,7 +213,7 @@ public:
             diag_pub.publish(diag_array);
         } else {
             bool valid = true;
-            int16_t m1cur, m2cur;
+            uint16_t m1cur, m2cur;
             double temp, battery = 1;
             diagnostic_msgs::DiagnosticStatus stat;
             stat.name = "Roboclaw";
