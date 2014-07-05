@@ -106,7 +106,7 @@ public:
         return true;
     }
 
-    void upateOdom(){
+    void upateOdom() throw (boost::system::system_error){
 	//ROS_INFO_STREAM("updating odom");
         // calcuate time elapsed since last update
         ros::Time now = ros::Time::now();
@@ -176,7 +176,7 @@ public:
 	//ROS_INFO_STREAM("odom updated");
     }
 
-    void updateDiagnostics(){
+    void updateDiagnostics() throw (boost::system::system_error){
 	//ROS_INFO_STREAM("updating diags");
         last_diag = ros::Time::now();
         int error = -1;
@@ -251,7 +251,7 @@ public:
 
     }
 
-    void twistCb(geometry_msgs::Twist msg){
+    void twistCb(geometry_msgs::Twist msg)throw (boost::system::system_error){
         last_motor = ros::Time::now();
         double lin = msg.linear.x;
         double ang = msg.angular.z;
@@ -270,15 +270,21 @@ public:
     void spin(){
         ros::Rate r(update_rate);
         while (ros::ok()){
-            ros::spinOnce();
-            this->upateOdom();
-            if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
-                this->updateDiagnostics();
+            try{
+                ros::spinOnce();
+                this->upateOdom();
+                if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
+                    this->updateDiagnostics();
+                }
+                if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
+                    claw->SetMixedSpeed(0,0);
+                }
+                r.sleep();
+            } catch (boost::system::system_error e){
+                ROS_ERROR_STREAM("Error reading data from motor driver");
+                return;
             }
-            if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
-                claw->SetMixedSpeed(0,0);
-            }
-            r.sleep();
+
         }
         this->shutdown();
     }
