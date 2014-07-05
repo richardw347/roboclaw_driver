@@ -85,19 +85,19 @@ class Roboclaw{
 public:
     Roboclaw(const std::string port, int baud_rate, char address, int timeout=5);
     ~Roboclaw();
-    std::string ReadVersion() throw(boost::system::system_error);
-    int32_t ReadEncoderM1(char &status, bool &valid) throw(boost::system::system_error);
-    int32_t ReadEncoderM2(char &status, bool &valid) throw(boost::system::system_error);
-    int32_t ReadSpeedM1(char &status, bool &valid) throw(boost::system::system_error);
-    int32_t ReadSpeedM2(char &status, bool &valid) throw(boost::system::system_error);
-    int32_t ReadMainBatteryVoltage(bool &valid) throw(boost::system::system_error);
-    uint16_t ReadTemperature(bool &valid) throw(boost::system::system_error);
-    int8_t ReadErrorState(bool &valid) throw(boost::system::system_error);
-    bool ReadCurrents(uint16_t &current1, uint16_t &current2) throw(boost::system::system_error);
-    void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error);
-    void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error);
-    void SetMixedSpeed(int32_t m1_speed, int32_t m2_speed) throw(boost::system::system_error);
-    void ResetEncoders() throw(boost::system::system_error);
+    std::string ReadVersion();
+    int32_t ReadEncoderM1(char &status, bool &valid);
+    int32_t ReadEncoderM2(char &status, bool &valid);
+    int32_t ReadSpeedM1(char &status, bool &valid);
+    int32_t ReadSpeedM2(char &status, bool &valid);
+    int32_t ReadMainBatteryVoltage(bool &valid);
+    uint16_t ReadTemperature(bool &valid);
+    int8_t ReadErrorState(bool &valid);
+    bool ReadCurrents(uint16_t &current1, uint16_t &current2);
+    void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
+    void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
+    void SetMixedSpeed(int32_t m1_speed, int32_t m2_speed);
+    void ResetEncoders();
 
     enum ErrorCodes {ERR_M1_CURRENT = 1,
                      ERR_M2_CURRENT = 2,
@@ -116,11 +116,11 @@ private:
     int _timeout;
     char _address;
 
-    void write_32(char &crc, uint32_t val) throw(boost::system::system_error);
-    uint16_t Read2(char cmd,bool *valid) throw(boost::system::system_error);
-    uint32_t Read4_1(char cmd, char *status, bool *valid) throw(boost::system::system_error);
-    void write(char c)throw(boost::system::system_error);
-    char read() throw(boost::system::system_error);
+    void write_32(char &crc, uint32_t val);
+    uint16_t Read2(char cmd,bool *valid);
+    uint32_t Read4_1(char cmd, char *status, bool *valid);
+    void write(char c);
+    char read();
 };
 
 

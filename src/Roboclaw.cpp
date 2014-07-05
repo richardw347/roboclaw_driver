@@ -23,7 +23,7 @@ Roboclaw::~Roboclaw(){
     _t_serial->close();
 }
 
-std::string Roboclaw::ReadVersion() throw(boost::system::system_error){
+std::string Roboclaw::ReadVersion(){
     char crc;
     write(_address);
     crc=_address;
@@ -45,7 +45,7 @@ std::string Roboclaw::ReadVersion() throw(boost::system::system_error){
 	return std::string("NULL");
 }
 
-uint16_t Roboclaw::Read2(char cmd,bool *valid) throw(boost::system::system_error){
+uint16_t Roboclaw::Read2(char cmd,bool *valid){
     char crc;
     write(_address);
     crc=_address;
@@ -68,7 +68,7 @@ uint16_t Roboclaw::Read2(char cmd,bool *valid) throw(boost::system::system_error
     return value;
 }
 
-uint32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid) throw(boost::system::system_error){
+uint32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid){
     char crc;
     write(_address);
     crc=_address;
@@ -104,27 +104,27 @@ uint32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid) throw(boost::sys
     return value;
 }
 
-int32_t Roboclaw::ReadEncoderM1(char &status, bool &valid) throw(boost::system::system_error){
+int32_t Roboclaw::ReadEncoderM1(char &status, bool &valid){
     return (int32_t) Read4_1(char(GETM1ENC), &status, &valid);
 }
 
-int32_t Roboclaw::ReadEncoderM2(char &status, bool &valid) throw(boost::system::system_error){
+int32_t Roboclaw::ReadEncoderM2(char &status, bool &valid){
     return (int32_t) Read4_1(char(GETM2ENC), &status, &valid);
 }
 
-int32_t Roboclaw::ReadSpeedM1(char &status, bool &valid) throw(boost::system::system_error){
+int32_t Roboclaw::ReadSpeedM1(char &status, bool &valid){
     return (int32_t) Read4_1(char(GETM1SPEED), &status, &valid);
 }
-int32_t Roboclaw::ReadSpeedM2(char &status, bool &valid) throw(boost::system::system_error){
+int32_t Roboclaw::ReadSpeedM2(char &status, bool &valid){
     return (int32_t) Read4_1(char(GETM2SPEED), &status, &valid);
 }
 
-uint16_t Roboclaw::ReadTemperature(bool &valid) throw(boost::system::system_error){
+uint16_t Roboclaw::ReadTemperature(bool &valid){
     uint16_t temp = Read2(char(GETTEMP),&valid);
     return temp;
 }
 
-int8_t Roboclaw::ReadErrorState(bool &valid) throw(boost::system::system_error){
+int8_t Roboclaw::ReadErrorState(bool &valid){
     char crc;
     write(_address);
     crc=_address;
@@ -142,7 +142,7 @@ int8_t Roboclaw::ReadErrorState(bool &valid) throw(boost::system::system_error){
     return value;
 }
 
-void Roboclaw::ResetEncoders() throw(boost::system::system_error){
+void Roboclaw::ResetEncoders(){
     char crc=0;
     write(_address);
     crc+=_address;
@@ -151,7 +151,7 @@ void Roboclaw::ResetEncoders() throw(boost::system::system_error){
     write(crc&0x7F);
 }
 
-int32_t Roboclaw::ReadMainBatteryVoltage(bool &valid) throw(boost::system::system_error){
+int32_t Roboclaw::ReadMainBatteryVoltage(bool &valid){
     char crc=0;
     write(_address);
     crc+=_address;
@@ -170,7 +170,7 @@ int32_t Roboclaw::ReadMainBatteryVoltage(bool &valid) throw(boost::system::syste
     return value;
 }
 
-bool Roboclaw::ReadCurrents(uint16_t &current1, uint16_t &current2) throw(boost::system::system_error){
+bool Roboclaw::ReadCurrents(uint16_t &current1, uint16_t &current2){
 
     char crc=0;
     write(_address);
@@ -200,7 +200,7 @@ bool Roboclaw::ReadCurrents(uint16_t &current1, uint16_t &current2) throw(boost:
 }
 
 
-void Roboclaw::SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error){
+void Roboclaw::SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
 
     uint32_t kd = kd_fp*65536;
     uint32_t kp = kp_fp*65536;
@@ -222,7 +222,7 @@ void Roboclaw::SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t 
     write(crc&0x7F);
 }
 
-void Roboclaw::SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error){
+void Roboclaw::SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
 
     uint32_t kd = kd_fp*65536;
     uint32_t kp = kp_fp*65536;
@@ -243,7 +243,7 @@ void Roboclaw::SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t 
     write(crc&0x7F);
 }
 
-void Roboclaw::SetMixedSpeed(int32_t m1_speed, int32_t m2_speed) throw(boost::system::system_error){
+void Roboclaw::SetMixedSpeed(int32_t m1_speed, int32_t m2_speed){
 
     char crc=0;
 
@@ -259,7 +259,7 @@ void Roboclaw::SetMixedSpeed(int32_t m1_speed, int32_t m2_speed) throw(boost::sy
     write(crc&0x7F);
 }
 
-void Roboclaw::write_32( char& crc, uint32_t val) throw(boost::system::system_error){
+void Roboclaw::write_32( char& crc, uint32_t val){
 
     crc+=(char)(val>>24);
     crc+=(char)(val>>16);
@@ -270,11 +270,11 @@ void Roboclaw::write_32( char& crc, uint32_t val) throw(boost::system::system_er
     _t_serial->write((char*)&commands, 4);
 }
 
-void Roboclaw::write(char c) throw(boost::system::system_error){
+void Roboclaw::write(char c){
     _t_serial->write(&c, 1);
 }
 
-char Roboclaw::read() throw(boost::system::system_error){
+char Roboclaw::read(){
     char c;
     _t_serial->read(&c, 1);
     return c;

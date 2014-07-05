@@ -270,21 +270,15 @@ public:
     void spin(){
         ros::Rate r(update_rate);
         while (ros::ok()){
-            try{
-                ros::spinOnce();
-                this->upateOdom();
-                if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
-                    this->updateDiagnostics();
-                }
-                if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
-                    claw->SetMixedSpeed(0,0);
-                }
-                r.sleep();
-            } catch (boost::system::system_error e){
-                ROS_ERROR_STREAM("Error reading data from motor driver");
-                return;
+            ros::spinOnce();
+            this->upateOdom();
+            if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
+                this->updateDiagnostics();
             }
-
+            if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
+                claw->SetMixedSpeed(0,0);
+            }
+            r.sleep();
         }
         this->shutdown();
     }
