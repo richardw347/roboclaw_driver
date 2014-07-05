@@ -119,8 +119,8 @@ int32_t Roboclaw::ReadSpeedM2(char &status, bool &valid) throw(boost::system::sy
     return (int32_t) Read4_1(char(GETM2SPEED), &status, &valid);
 }
 
-uint16_t Roboclaw::ReadTemperature(bool &valid) throw(boost::system::system_error){
-    uint16_t temp = Read2(char(GETTEMP),&valid);
+int16_t Roboclaw::ReadTemperature(bool &valid) throw(boost::system::system_error){
+    int16_t temp = Read2(char(GETTEMP),&valid);
     return temp;
 }
 

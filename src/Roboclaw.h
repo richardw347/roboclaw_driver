@@ -91,7 +91,7 @@ public:
     int32_t ReadSpeedM1(char &status, bool &valid) throw(boost::system::system_error);
     int32_t ReadSpeedM2(char &status, bool &valid) throw(boost::system::system_error);
     int32_t ReadMainBatteryVoltage(bool &valid) throw(boost::system::system_error);
-    uint16_t ReadTemperature(bool &valid) throw(boost::system::system_error);
+    int16_t ReadTemperature(bool &valid) throw(boost::system::system_error);
     int8_t ReadErrorState(bool &valid) throw(boost::system::system_error);
     bool ReadCurrents(uint16_t &current1, uint16_t &current2) throw(boost::system::system_error);
     void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps) throw(boost::system::system_error);
