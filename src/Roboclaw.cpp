@@ -76,23 +76,23 @@ uint32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid) throw(boost::sys
     crc+=cmd;
 
     long value;
-    char data = read();
+    uint8_t data = (uint8_t)read();
     crc+=data;
     value=(uint32_t)data<<24;
 
-    data = read();
+    data = (uint8_t)read();
     crc+=data;
     value|=(uint32_t)data<<16;
 
-    data = read();
+    data = (uint8_t)read();
     crc+=data;
     value|=(uint32_t)data<<8;
 
-    data = read();
+    data = (uint8_t)read();
     crc+=data;
     value|=(uint32_t)data;
 
-    data = read();
+    data = (uint8_t)read();
     crc+=data;
     if(status)
         *status = data;
