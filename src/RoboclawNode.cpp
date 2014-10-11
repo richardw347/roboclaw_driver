@@ -11,10 +11,11 @@
 #include "Roboclaw.h"
 
 #define address 0x80
+#define MAX_ERRORS 5
 
 class RoboclawNode{
 public:
-    RoboclawNode(): nh(), priv_nh("~"){
+    RoboclawNode(): nh(), priv_nh("~"), debug(false), error_count(0){
         priv_nh.param<std::string>("port", port, "/dev/roboclaw");
         priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_footprint");
         if(!priv_nh.getParam("baud_rate", baud_rate)){
@@ -71,10 +72,12 @@ public:
         odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
         joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 10);
 
+        ROS_INFO_COND(debug, "Setting PID params and resetting encoders");
         claw->SetM1VelocityPID(KD,KP,KI,QPPS);
         claw->SetM2VelocityPID(KD,KP,KI,QPPS);
         claw->ResetEncoders();
 
+        ROS_INFO_COND(debug, "reading version");
         roboclaw_version = claw->ReadVersion();
 
         ROS_INFO_STREAM("Connected to: " << roboclaw_version);
@@ -107,7 +110,7 @@ public:
     }
 
     void upateOdom() throw (boost::system::system_error){
-	//ROS_INFO_STREAM("updating odom");
+        //ROS_INFO_STREAM("updating odom");
         // calcuate time elapsed since last update
         ros::Time now = ros::Time::now();
         ros::Duration elapsed_t = now - last_odom;
@@ -116,16 +119,25 @@ public:
 
         char status;
         bool valid1, valid2;
+        long encoder_left = last_enc_left;
+        long encoder_right = last_enc_right;
 
         // read the encoder counts
-        long encoder_left = claw->ReadEncoderM1(status, valid1);
-        long encoder_right = claw->ReadEncoderM2(status, valid2);
-
+        ROS_INFO_COND(debug, "reading encoders");
+        try{
+            encoder_left = claw->ReadEncoderM1(status, valid1);
+            encoder_right = claw->ReadEncoderM2(status, valid2);
+        } catch(timeout_exception& ex){
+            ROS_WARN_STREAM("Error: " << ex.what());
+            error_count++;
+            return;
+        }
         if (!valid1 || !valid2){
             ROS_WARN_STREAM("Invalid encoder count reading");
             return;
         }
 
+        error_count = 0;
         // calculate distance travelled by each wheel
         double dist_left = (float)(encoder_left - last_enc_left) / ticks_per_m;
         double dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
@@ -171,17 +183,24 @@ public:
         odom.twist.twist.angular.z = vth;
         odom_pub.publish(odom);
 
-	js.header.stamp = ros::Time::now();
-	joint_pub.publish(js);
-	//ROS_INFO_STREAM("odom updated");
+        js.header.stamp = ros::Time::now();
+        joint_pub.publish(js);
+        //ROS_INFO_STREAM("odom updated");
     }
 
     void updateDiagnostics() throw (boost::system::system_error){
-	//ROS_INFO_STREAM("updating diags");
+        //ROS_INFO_STREAM("updating diags");
         last_diag = ros::Time::now();
         int error = -1;
         bool valid = false;
-        error = claw->ReadErrorState(valid);
+        ROS_INFO_COND(debug, "reading error state");
+        try{
+            error = claw->ReadErrorState(valid);
+        } catch(const timeout_exception& ex){
+            ROS_WARN_STREAM("Error: " << ex.what());
+            error_count++;
+            return;
+        }
         std::vector<std::string> messages;
         diagnostic_msgs::DiagnosticArray diag_array;
         diag_array.header.stamp = ros::Time::now();
@@ -220,33 +239,43 @@ public:
             stat.hardware_id = roboclaw_version;
             stat.level = stat.OK;
             stat.message = "Running";
-            temp = claw->ReadTemperature(valid);
-            if (valid){
-                diagnostic_msgs::KeyValue kv;
-                kv.key = "Temperature (Degrees C)";
-                kv.value = boost::lexical_cast<std::string>((double)temp/10.0);
-                stat.values.push_back(kv);
-            }
-            battery = claw->ReadMainBatteryVoltage(valid);
-            if (valid){
-                diagnostic_msgs::KeyValue kv;
-                kv.key = "Voltage (V)";
-                kv.value = boost::lexical_cast<std::string>((double)battery/10.0);
-                stat.values.push_back(kv);
-            }
-            if (claw->ReadCurrents(m1cur, m2cur)){
-                diagnostic_msgs::KeyValue kv;
-                kv.key = "Motor1 Current (A)";
-                kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
-                stat.values.push_back(kv);
+            ROS_INFO_COND(debug, "getting temp");
+            try{
+                temp = claw->ReadTemperature(valid);
+                if (valid){
+                    diagnostic_msgs::KeyValue kv;
+                    kv.key = "Temperature (Degrees C)";
+                    kv.value = boost::lexical_cast<std::string>((double)temp/10.0);
+                    stat.values.push_back(kv);
+                }
+                ROS_INFO_COND(debug, "getting battery");
+                battery = claw->ReadMainBatteryVoltage(valid);
+                if (valid){
+                    diagnostic_msgs::KeyValue kv;
+                    kv.key = "Voltage (V)";
+                    kv.value = boost::lexical_cast<std::string>((double)battery/10.0);
+                    stat.values.push_back(kv);
+                }
+                ROS_INFO_COND(debug, "getting currents");
+                if (claw->ReadCurrents(m1cur, m2cur)){
+                    diagnostic_msgs::KeyValue kv;
+                    kv.key = "Motor1 Current (A)";
+                    kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
+                    stat.values.push_back(kv);
 
-                kv.key = "Motor2 Current (A)";
-                kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
-                stat.values.push_back(kv);
+                    kv.key = "Motor2 Current (A)";
+                    kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
+                    stat.values.push_back(kv);
+                }
+            } catch(const timeout_exception& ex){
+                ROS_WARN_STREAM("Error: " << ex.what());
+                error_count++;
+                return;
             }
+
             diag_array.status.push_back(stat);
             diag_pub.publish(diag_array);
-	    //ROS_INFO_STREAM("diag updating");
+            //ROS_INFO_STREAM("diag updating");
         }
 
     }
@@ -259,6 +288,7 @@ public:
         double right = 1.0 * lin + ang * base_width / 2.0;
         int32_t left_qpps = left * ticks_per_m;
         int32_t right_qpps = right * ticks_per_m;
+        ROS_INFO("setting speeds");
         claw->SetMixedSpeed(left_qpps, right_qpps);
         ros::Duration(0.05).sleep();
     }
@@ -277,6 +307,10 @@ public:
             }
             if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
                 claw->SetMixedSpeed(0,0);
+            }
+            if (error_count > MAX_ERRORS){
+                ROS_ERROR("Error limit reached shutting down");
+                break;
             }
             r.sleep();
         }
@@ -311,7 +345,8 @@ private:
     tf::TransformBroadcaster br;
     sensor_msgs::JointState js;
     ros::ServiceServer calib_server;
-
+    bool debug;
+    int error_count;
 };
 
 
