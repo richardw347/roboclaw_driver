@@ -288,7 +288,7 @@ public:
         double right = 1.0 * lin + ang * base_width / 2.0;
         int32_t left_qpps = left * ticks_per_m;
         int32_t right_qpps = right * ticks_per_m;
-        ROS_INFO("setting speeds");
+        //ROS_INFO("setting speeds");
         claw->SetMixedSpeed(left_qpps, right_qpps);
         ros::Duration(0.05).sleep();
     }
