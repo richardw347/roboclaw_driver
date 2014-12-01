@@ -8,6 +8,7 @@
 #include <std_srvs/Empty.h>
 #include <std_srvs/EmptyRequest.h>
 #include <std_srvs/EmptyResponse.h>
+#include <std_msgs/Float64.h>
 #include "Roboclaw.h"
 
 #define address 0x80
@@ -71,6 +72,7 @@ public:
         diag_pub = nh.advertise<diagnostic_msgs::DiagnosticArray>("diagnostics", 10);
         odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
         joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 10);
+        battery_pub = nh.advertise<std_msgs::Float64>("battery_voltage", 10);
 
         ROS_INFO_COND(debug, "Setting PID params and resetting encoders");
         claw->SetM1VelocityPID(KD,KP,KI,QPPS);
@@ -253,7 +255,11 @@ public:
                 if (valid){
                     diagnostic_msgs::KeyValue kv;
                     kv.key = "Voltage (V)";
-                    kv.value = boost::lexical_cast<std::string>((double)battery/10.0);
+                    battery_voltage = (double)battery/10.0;
+                    std_msgs::Float64 flt;
+                    flt.data = battery_voltage;
+                    battery_pub.publish(flt);
+                    kv.value = boost::lexical_cast<std::string>(battery_voltage);
                     stat.values.push_back(kv);
                 }
                 ROS_INFO_COND(debug, "getting currents");
@@ -321,7 +327,7 @@ public:
 private:
     ros::NodeHandle nh, priv_nh;
     ros::Subscriber cmd_vel_sub;
-    ros::Publisher odom_pub, diag_pub, joint_pub;
+    ros::Publisher odom_pub, diag_pub, joint_pub, battery_pub;
     std::string port;
     int baud_rate;
     int update_rate;
@@ -347,6 +353,7 @@ private:
     ros::ServiceServer calib_server;
     bool debug;
     int error_count;
+    double battery_voltage;
 };
 
 
