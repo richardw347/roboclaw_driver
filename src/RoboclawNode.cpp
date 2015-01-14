@@ -12,7 +12,7 @@
 #include "Roboclaw.h"
 
 #define address 0x80
-#define MAX_ERRORS 5
+#define MAX_ERRORS 10
 
 class RoboclawNode{
 public:
@@ -43,6 +43,16 @@ public:
         if(!priv_nh.getParam("QPPS", QPPS)){
             QPPS = 11600;
         }
+        if(!priv_nh.getParam("last_odom_x", x)){
+            x=0.0;
+        }
+        if(!priv_nh.getParam("last_odom_y", y)){
+            y=0.0;
+        }
+        if(!priv_nh.getParam("last_odom_theta", theta)){
+            theta=0.0;
+        }
+
 
         ROS_INFO_STREAM("Starting roboclaw node with params:");
         ROS_INFO_STREAM("Port:\t" << port);
@@ -57,7 +67,7 @@ public:
         claw = new Roboclaw(port, baud_rate, address);
         last_motor = ros::Time::now();
 
-        x = y = theta = 0.0;
+        //x = y = theta = 0.0;
         last_enc_left = last_enc_right = 0;
         last_odom  = ros::Time::now();
 
@@ -315,6 +325,9 @@ public:
                 claw->SetMixedSpeed(0,0);
             }
             if (error_count > MAX_ERRORS){
+		priv_nh.setParam("last_odom_x", x);
+                priv_nh.setParam("last_odom_y", y);
+                priv_nh.setParam("last_odom_theta", theta);
                 ROS_ERROR("Error limit reached shutting down");
                 break;
             }
