@@ -146,7 +146,8 @@ public:
         }
         if (!valid1 || !valid2){
             ROS_WARN_STREAM("Invalid encoder count reading");
-            return;
+            error_count++;
+	    return;
         }
 
         error_count = 0;
