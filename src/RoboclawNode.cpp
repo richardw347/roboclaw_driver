@@ -44,15 +44,21 @@ public:
             QPPS = 11600;
         }
         if(!priv_nh.getParam("last_odom_x", x)){
-            x=0.0;
-        }
+		x=0.0;
+        } else {
+		ROS_INFO_STREAM("setting X postion to " << x);
+	}
         if(!priv_nh.getParam("last_odom_y", y)){
             y=0.0;
-        }
+        } else {
+		ROS_INFO_STREAM("setting Y position to " << y);
+	}
         if(!priv_nh.getParam("last_odom_theta", theta)){
             theta=0.0;
         }
-
+	if(!priv_nh.getParam("roboclaw_version_string", roboclaw_expected_version)){
+	    roboclaw_expected_version = "";
+	}
 
         ROS_INFO_STREAM("Starting roboclaw node with params:");
         ROS_INFO_STREAM("Port:\t" << port);
@@ -68,7 +74,8 @@ public:
         last_motor = ros::Time::now();
 
         //x = y = theta = 0.0;
-        last_enc_left = last_enc_right = 0;
+        vx = vth = 0;
+	last_enc_left = last_enc_right = 0;
         last_odom  = ros::Time::now();
 
         quaternion.x = 0.0;
@@ -92,6 +99,13 @@ public:
         ROS_INFO_COND(debug, "reading version");
         roboclaw_version = claw->ReadVersion();
 
+	if (roboclaw_version.compare(roboclaw_expected_version) != 0){
+		ROS_ERROR_STREAM("Unable to connect to expected device, expected: " << 
+				roboclaw_expected_version << " instead got: " <<  
+				roboclaw_version);
+		ros::shutdown();
+	}
+
         ROS_INFO_STREAM("Connected to: " << roboclaw_version);
 
         js.name.push_back("base_l_wheel_joint");
@@ -110,10 +124,10 @@ public:
         ROS_INFO_STREAM("calibrating motors");
         ros::Duration wait(1.0);
         geometry_msgs::Twist calib;
-        calib.angular.z = 0.2;
+        calib.angular.z = 0.3;
         this->twistCb(calib);
         wait.sleep();
-        calib.angular.z = -0.2;
+        calib.angular.z = -0.3;
         this->twistCb(calib);
         wait.sleep();
         calib.angular.z = 0.0;
@@ -163,8 +177,8 @@ public:
         double dist_travelled = (dist_left + dist_right) / 2;
         // calculate appoximate heading change (radians), this works for small angles
         double delta_th = (dist_right - dist_left) / base_width;
-        double vx = dist_travelled / elapsed;
-        double vth = delta_th / elapsed;
+        vx = dist_travelled / elapsed;
+        vth = delta_th / elapsed;
 
         if (dist_travelled != 0){
             double delta_x = cos(delta_th) * dist_travelled;
@@ -200,6 +214,19 @@ public:
         joint_pub.publish(js);
         //ROS_INFO_STREAM("odom updated");
     }
+    void resetEncoders() {
+	if (vx == 0 && vth == 0){
+		try{
+			claw->ResetEncoders();
+	                last_enc_left = 0;
+        	        last_enc_right = 0;
+		} catch(const timeout_exception& ex){
+		        ROS_WARN_STREAM("Error: " << ex.what());
+		        error_count++;
+			return;
+		}
+	}
+    }
 
     void updateDiagnostics() throw (boost::system::system_error){
         //ROS_INFO_STREAM("updating diags");
@@ -217,7 +244,7 @@ public:
         std::vector<std::string> messages;
         diagnostic_msgs::DiagnosticArray diag_array;
         diag_array.header.stamp = ros::Time::now();
-        if (valid && error != 0){
+        if (error != 0){
             // parse the error string
             if ((error & Roboclaw::ERR_M1_CURRENT) == Roboclaw::ERR_M1_CURRENT)
                 messages.push_back("Motor1 OverCurrent");
@@ -281,7 +308,7 @@ public:
                     stat.values.push_back(kv);
 
                     kv.key = "Motor2 Current (A)";
-                    kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
+                    kv.value = boost::lexical_cast<std::string>((double)m2cur/100.0);
                     stat.values.push_back(kv);
                 }
             } catch(const timeout_exception& ex){
@@ -301,13 +328,19 @@ public:
         last_motor = ros::Time::now();
         double lin = msg.linear.x;
         double ang = msg.angular.z;
+	if (lin == last_lin_speed && ang == last_ang_speed){
+		return;
+	} else {
+		last_lin_speed = lin;
+		last_ang_speed = ang;
+	}
         double left = 1.0 * lin - ang * base_width / 2.0;
         double right = 1.0 * lin + ang * base_width / 2.0;
         int32_t left_qpps = left * ticks_per_m;
         int32_t right_qpps = right * ticks_per_m;
         //ROS_INFO("setting speeds");
         claw->SetMixedSpeed(left_qpps, right_qpps);
-        ros::Duration(0.05).sleep();
+        ros::Duration(0.1).sleep();
     }
 
     void shutdown(){
@@ -321,6 +354,7 @@ public:
             this->upateOdom();
             if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
                 this->updateDiagnostics();
+		this->resetEncoders();
             }
             if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
                 claw->SetMixedSpeed(0,0);
@@ -355,19 +389,20 @@ private:
     ros::Time last_motor;
     Roboclaw* claw;
 
-    double x, y, theta;
+    double x, y, theta, vx, vth;
     long last_enc_left, last_enc_right;
     ros::Time last_odom;
     nav_msgs::Odometry odom;
     geometry_msgs::Quaternion quaternion;
     ros::Time last_diag;
-    std::string roboclaw_version;
+    std::string roboclaw_version, roboclaw_expected_version;
     tf::TransformBroadcaster br;
     sensor_msgs::JointState js;
     ros::ServiceServer calib_server;
     bool debug;
     int error_count;
     double battery_voltage;
+    double last_lin_speed, last_ang_speed;
 };
 
 

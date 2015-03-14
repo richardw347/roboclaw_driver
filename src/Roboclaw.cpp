@@ -75,7 +75,7 @@ uint32_t Roboclaw::Read4_1(char cmd, char *status, bool *valid){
     write(cmd);
     crc+=cmd;
 
-    long value;
+    uint32_t value;
     uint8_t data = (uint8_t)read();
     crc+=data;
     value=(uint32_t)data<<24;
