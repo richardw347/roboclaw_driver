@@ -1,6 +1,7 @@
 #ifndef RoboClaw_h
 #define RoboClaw_h
 
+#include <pthread.h>
 #include <iostream>
 #include <stdarg.h>
 #include "TimeoutSerial.h"
@@ -83,20 +84,20 @@ class Roboclaw{
 
 
 public:
-    Roboclaw(const std::string port, int baud_rate, char address, int timeout=2);
+    Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=2);
     ~Roboclaw();
     std::string ReadVersion();
-    int32_t ReadEncoderM1(char &status, bool &valid);
-    int32_t ReadEncoderM2(char &status, bool &valid);
-    int32_t ReadSpeedM1(char &status, bool &valid);
-    int32_t ReadSpeedM2(char &status, bool &valid);
-    int32_t ReadMainBatteryVoltage(bool &valid);
-    uint16_t ReadTemperature(bool &valid);
-    int8_t ReadErrorState(bool &valid);
-    bool ReadCurrents(uint16_t &current1, uint16_t &current2);
+    int32_t ReadEncoderM1(uint8_t &status, bool *valid);
+    int32_t ReadEncoderM2(uint8_t &status, bool *valid);
+    int32_t ReadSpeedM1(uint8_t &status, bool *valid);
+    int32_t ReadSpeedM2(uint8_t &status, bool *valid);
+    int32_t ReadMainBatteryVoltage(bool *valid);
+    uint16_t ReadTemperature(bool *valid);
+    int8_t ReadErrorState(bool *valid);
+    bool ReadCurrents(int16_t &current1, int16_t &current2);
     void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
     void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
-    void SetMixedSpeed(int32_t m1_speed, int32_t m2_speed);
+    void SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed);
     void ResetEncoders();
 
     enum ErrorCodes {ERR_M1_CURRENT = 1,
@@ -110,17 +111,18 @@ public:
 
 private:
     TimeoutSerial* _t_serial;
-    //boost::asio::io_service _io;
-    //boost::asio::serial_port _serial;
     std::string _port;
     int _timeout;
-    char _address;
+    uint8_t _address;
 
-    void write_32(char &crc, uint32_t val);
-    uint16_t Read2(char cmd,bool *valid);
-    uint32_t Read4_1(char cmd, char *status, bool *valid);
+    void SetM1Constants(uint32_t kd, uint32_t kp, uint32_t ki, uint32_t qpps);
+    void SetM2Constants(uint32_t kd, uint32_t kp, uint32_t ki, uint32_t qpps);
+    uint16_t Read2(uint8_t cmd, bool *valid);
+    uint32_t Read4(uint8_t cmd, bool *valid);
+    uint32_t Read4_1(uint8_t cmd, uint8_t *status, bool *valid);
     void write(char c);
-    char read();
+    void write_n(uint8_t byte, ...);    
+    uint8_t read();
 };
 
 

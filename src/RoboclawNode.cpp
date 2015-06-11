@@ -10,6 +10,7 @@
 #include <std_srvs/EmptyResponse.h>
 #include <std_msgs/Float64.h>
 #include "Roboclaw.h"
+#include <boost/thread/mutex.hpp>
 
 #define address 0x80
 #define MAX_ERRORS 10
@@ -17,6 +18,7 @@
 class RoboclawNode{
 public:
     RoboclawNode(): nh(), priv_nh("~"), debug(false), error_count(0){
+	boost::mutex::scoped_lock lock(claw_mutex_);
         priv_nh.param<std::string>("port", port, "/dev/roboclaw");
         priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_footprint");
         if(!priv_nh.getParam("baud_rate", baud_rate)){
@@ -56,9 +58,6 @@ public:
         if(!priv_nh.getParam("last_odom_theta", theta)){
             theta=0.0;
         }
-	if(!priv_nh.getParam("roboclaw_version_string", roboclaw_expected_version)){
-	    roboclaw_expected_version = "";
-	}
 
         ROS_INFO_STREAM("Starting roboclaw node with params:");
         ROS_INFO_STREAM("Port:\t" << port);
@@ -98,14 +97,6 @@ public:
 
         ROS_INFO_COND(debug, "reading version");
         roboclaw_version = claw->ReadVersion();
-
-	if (roboclaw_version.compare(roboclaw_expected_version) != 0){
-		ROS_ERROR_STREAM("Unable to connect to expected device, expected: " << 
-				roboclaw_expected_version << " instead got: " <<  
-				roboclaw_version);
-		ros::shutdown();
-	}
-
         ROS_INFO_STREAM("Connected to: " << roboclaw_version);
 
         js.name.push_back("base_l_wheel_joint");
@@ -136,6 +127,8 @@ public:
     }
 
     void upateOdom() throw (boost::system::system_error){
+
+	boost::mutex::scoped_lock lock(claw_mutex_);
         //ROS_INFO_STREAM("updating odom");
         // calcuate time elapsed since last update
         ros::Time now = ros::Time::now();
@@ -143,7 +136,7 @@ public:
         last_odom = now;
         double elapsed = elapsed_t.toSec();
 
-        char status;
+        uint8_t status;
         bool valid1, valid2;
         long encoder_left = last_enc_left;
         long encoder_right = last_enc_right;
@@ -151,18 +144,22 @@ public:
         // read the encoder counts
         ROS_INFO_COND(debug, "reading encoders");
         try{
-            encoder_left = claw->ReadEncoderM1(status, valid1);
-            encoder_right = claw->ReadEncoderM2(status, valid2);
+            encoder_left = claw->ReadEncoderM1(status, &valid1);
+            encoder_right = claw->ReadEncoderM2(status, &valid2);
         } catch(timeout_exception& ex){
             ROS_WARN_STREAM("Error: " << ex.what());
             error_count++;
             return;
         }
-        if (!valid1 || !valid2){
-            ROS_WARN_STREAM("Invalid encoder count reading");
-            error_count++;
+        
+	if (!valid1 && !(status == 0 || status == 1)){
+	    ROS_WARN("Invalid encoder data on motor 1");
 	    return;
-        }
+	} 
+	if (!valid2 && !(status == 0 || status == 1)){
+            ROS_WARN("Invalid encoder data on motor 2");
+	    return;
+        } 
 
         error_count = 0;
         // calculate distance travelled by each wheel
@@ -215,6 +212,7 @@ public:
         //ROS_INFO_STREAM("odom updated");
     }
     void resetEncoders() {
+	boost::mutex::scoped_lock lock(claw_mutex_);
 	if (vx == 0 && vth == 0){
 		try{
 			claw->ResetEncoders();
@@ -229,13 +227,17 @@ public:
     }
 
     void updateDiagnostics() throw (boost::system::system_error){
+	boost::mutex::scoped_lock lock(claw_mutex_);
         //ROS_INFO_STREAM("updating diags");
         last_diag = ros::Time::now();
         int error = -1;
         bool valid = false;
         ROS_INFO_COND(debug, "reading error state");
         try{
-            error = claw->ReadErrorState(valid);
+            error = claw->ReadErrorState(&valid);
+	    if (!valid){
+	        return;
+	    }
         } catch(const timeout_exception& ex){
             ROS_WARN_STREAM("Error: " << ex.what());
             error_count++;
@@ -246,10 +248,14 @@ public:
         diag_array.header.stamp = ros::Time::now();
         if (error != 0){
             // parse the error string
-            if ((error & Roboclaw::ERR_M1_CURRENT) == Roboclaw::ERR_M1_CURRENT)
+            if ((error & Roboclaw::ERR_M1_CURRENT) == Roboclaw::ERR_M1_CURRENT){
                 messages.push_back("Motor1 OverCurrent");
-            else if ((error & Roboclaw::ERR_M2_CURRENT) == Roboclaw::ERR_M2_CURRENT)
+	    	ROS_WARN("Motor1 OverCurrent");
+	    }
+            else if ((error & Roboclaw::ERR_M2_CURRENT) == Roboclaw::ERR_M2_CURRENT){
                 messages.push_back("Motor2 OverCurrent");
+	    	ROS_WARN("Motor2 OverCurrent");
+	    }
             else if ((error & Roboclaw::ERR_E_STOP) == Roboclaw::ERR_E_STOP)
                 messages.push_back("Emergency Stop");
             else if ((error & Roboclaw::ERR_TEMP) == Roboclaw::ERR_TEMP)
@@ -271,8 +277,8 @@ public:
             diag_array.status.push_back(stat);
             diag_pub.publish(diag_array);
         } else {
-            bool valid = true;
-            uint16_t m1cur, m2cur;
+            bool valid = false;
+            int16_t m1cur, m2cur;
             double temp, battery = 1;
             diagnostic_msgs::DiagnosticStatus stat;
             stat.name = "Roboclaw";
@@ -281,7 +287,7 @@ public:
             stat.message = "Running";
             ROS_INFO_COND(debug, "getting temp");
             try{
-                temp = claw->ReadTemperature(valid);
+                temp = claw->ReadTemperature(&valid);
                 if (valid){
                     diagnostic_msgs::KeyValue kv;
                     kv.key = "Temperature (Degrees C)";
@@ -289,7 +295,7 @@ public:
                     stat.values.push_back(kv);
                 }
                 ROS_INFO_COND(debug, "getting battery");
-                battery = claw->ReadMainBatteryVoltage(valid);
+                battery = claw->ReadMainBatteryVoltage(&valid);
                 if (valid){
                     diagnostic_msgs::KeyValue kv;
                     kv.key = "Voltage (V)";
@@ -325,7 +331,8 @@ public:
     }
 
     void twistCb(geometry_msgs::Twist msg)throw (boost::system::system_error){
-        last_motor = ros::Time::now();
+        boost::mutex::scoped_lock lock(claw_mutex_);
+	last_motor = ros::Time::now();
         double lin = msg.linear.x;
         double ang = msg.angular.z;
 	if (lin == last_lin_speed && ang == last_ang_speed){
@@ -338,8 +345,8 @@ public:
         double right = 1.0 * lin + ang * base_width / 2.0;
         int32_t left_qpps = left * ticks_per_m;
         int32_t right_qpps = right * ticks_per_m;
-        //ROS_INFO("setting speeds");
-        claw->SetMixedSpeed(left_qpps, right_qpps);
+        ROS_INFO("setting speeds left:%d right:%d", left_qpps, right_qpps);
+        claw->SetMixedSpeed(-left_qpps, -right_qpps);
         ros::Duration(0.1).sleep();
     }
 
@@ -388,6 +395,7 @@ private:
     std::string base_frame_id;
     ros::Time last_motor;
     Roboclaw* claw;
+    boost::mutex claw_mutex_;
 
     double x, y, theta, vx, vth;
     long last_enc_left, last_enc_right;
@@ -395,7 +403,7 @@ private:
     nav_msgs::Odometry odom;
     geometry_msgs::Quaternion quaternion;
     ros::Time last_diag;
-    std::string roboclaw_version, roboclaw_expected_version;
+    std::string roboclaw_version;
     tf::TransformBroadcaster br;
     sensor_msgs::JointState js;
     ros::ServiceServer calib_server;
