@@ -1,20 +1,10 @@
 #include "Roboclaw.h"
 
-Roboclaw::Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout)
-    //:
-    //_io(),
-    //_port(port),
-    //_serial(_io)
+Roboclaw::Roboclaw(const std::string port, int baud_rate, uint8_t address, float timeout)
 {
-
-
     _address = address;
-    _timeout = timeout;
-
     _t_serial = new TimeoutSerial(port, baud_rate);
-    _t_serial->setTimeout(posix_time::seconds(_timeout));
-    //_serial.open(_port);
-    //_serial.set_option(boost::asio::serial_port_base::baud_rate(baud_rate));
+    _t_serial->setTimeout(posix_time::seconds(1));
 
 }
 Roboclaw::~Roboclaw(){
@@ -207,36 +197,38 @@ bool Roboclaw::ReadCurrents(int16_t &current1, int16_t &current2){
 #define SetDWORDval(arg) (uint8_t)(arg>>24),(uint8_t)(arg>>16),(uint8_t)(arg>>8),(uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(arg>>8),(uint8_t)arg
 
-void Roboclaw::SetM1Constants(uint32_t kd, uint32_t kp, uint32_t ki, uint32_t qpps) {
-  write_n(18,_address,SETM1PID,SetDWORDval(kd),SetDWORDval(kp),SetDWORDval(ki),SetDWORDval(qpps));
-}
-
-void Roboclaw::SetM2Constants(uint32_t kd, uint32_t kp, uint32_t ki, uint32_t qpps) {
-  write_n(18,_address,SETM2PID,SetDWORDval(kd),SetDWORDval(kp),SetDWORDval(ki),SetDWORDval(qpps));
-}
-
-void Roboclaw::SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
+bool Roboclaw::SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
 
     uint32_t kd = kd_fp*65536;
     uint32_t kp = kp_fp*65536;
     uint32_t ki = ki_fp*65536;
-    this->SetM1Constants(kd, kp, ki, qpps);
+    return write_n(18,_address,SETM1PID,SetDWORDval(kd),SetDWORDval(kp),SetDWORDval(ki),SetDWORDval(qpps));
+
 }
 
-void Roboclaw::SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
+bool Roboclaw::SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
 
     uint32_t kd = kd_fp*65536;
     uint32_t kp = kp_fp*65536;
     uint32_t ki = ki_fp*65536;
-    this->SetM2Constants(kd, kp, ki, qpps);
+    return write_n(18,_address,SETM2PID,SetDWORDval(kd),SetDWORDval(kp),SetDWORDval(ki),SetDWORDval(qpps));
+
+
 }
 
-void Roboclaw::SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed){
+void Roboclaw::SetMixedSpeed(int32_t m1_speed, int32_t m2_speed){
   write_n(10, _address, MIXEDSPEED, SetDWORDval(m1_speed), SetDWORDval(m2_speed));
 }
 
+void Roboclaw::SetSpeedM1(uint32_t speed) {
+  write_n(6,_address,M1SPEED,SetDWORDval(speed));
+}
 
-void Roboclaw::write_n(uint8_t cnt, ... ) {
+void Roboclaw::SetSpeedM2(uint32_t speed) {
+  write_n(6,_address,M2SPEED,SetDWORDval(speed));
+}
+
+bool Roboclaw::write_n(uint8_t cnt, ... ) {
   static char buff[256];
   int ind = 0;
   uint8_t crc=0;
@@ -247,16 +239,18 @@ void Roboclaw::write_n(uint8_t cnt, ... ) {
   for(uint8_t index=0; index < cnt; index++) {
     uint8_t data = va_arg(marker, int);
     crc += data;
-    buff[ind++] = data;
+    buff[ind++] = static_cast<char>(data);
   }
   va_end(marker);
-  buff[ind++] = crc & 0x7F;
+  buff[ind++] = static_cast<char>(crc & 0x7F | 0x80);
   _t_serial->write(buff, cnt+1);
-
+  if(read()==0xFF)
+      return true;
+  return false;
 }
 
-void Roboclaw::write(char c){
-    _t_serial->write(&c, 1);
+void Roboclaw::write(uint8_t c){
+    _t_serial->write(reinterpret_cast<const char*>(&c), 1);
 }
 
 uint8_t Roboclaw::read(){

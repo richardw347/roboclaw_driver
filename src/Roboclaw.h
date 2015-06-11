@@ -84,7 +84,7 @@ class Roboclaw{
 
 
 public:
-    Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=1);
+    Roboclaw(const std::string port, int baud_rate, uint8_t address, float timeout=0.5);
     ~Roboclaw();
     std::string ReadVersion();
     int32_t ReadEncoderM1(uint8_t *status=NULL, bool *valid=NULL);
@@ -95,9 +95,11 @@ public:
     uint16_t ReadTemperature(bool *valid=NULL);
     int8_t ReadErrorState(bool *valid=NULL);
     bool ReadCurrents(int16_t &current1, int16_t &current2);
-    void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
-    void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
-    void SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed);
+    bool SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
+    bool SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
+    void SetMixedSpeed(int32_t m1_speed, int32_t m2_speed);
+    void SetSpeedM1(uint32_t speed);
+    void SetSpeedM2(uint32_t speed);
     void ResetEncoders();
     bool ReadEncoderModes(uint8_t &M1mode, uint8_t &M2mode);
 
@@ -113,16 +115,13 @@ public:
 private:
     TimeoutSerial* _t_serial;
     std::string _port;
-    int _timeout;
     uint8_t _address;
 
-    void SetM1Constants(uint32_t kd, uint32_t kp, uint32_t ki, uint32_t qpps);
-    void SetM2Constants(uint32_t kd, uint32_t kp, uint32_t ki, uint32_t qpps);
     uint16_t Read2(uint8_t cmd, bool *valid);
     uint32_t Read4(uint8_t cmd, bool *valid);
     uint32_t Read4_1(uint8_t cmd, uint8_t *status, bool *valid);
-    void write(char c);
-    void write_n(uint8_t byte, ...);    
+    void write(uint8_t c);
+    bool write_n(uint8_t byte, ...);    
     uint8_t read();
 };
 

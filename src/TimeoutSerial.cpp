@@ -215,6 +215,7 @@ void TimeoutSerial::timeoutExpired(const boost::system::error_code& error)
 void TimeoutSerial::readCompleted(const boost::system::error_code& error,
         const size_t bytesTransferred)
 {
+
     if(!error)
     {
         result=resultSuccess;
