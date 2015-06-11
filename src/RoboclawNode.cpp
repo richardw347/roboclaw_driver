@@ -91,13 +91,18 @@ public:
         battery_pub = nh.advertise<std_msgs::Float64>("battery_voltage", 10);
 
         ROS_INFO_COND(debug, "Setting PID params and resetting encoders");
-        claw->SetM1VelocityPID(KD,KP,KI,QPPS);
-        claw->SetM2VelocityPID(KD,KP,KI,QPPS);
-        claw->ResetEncoders();
+        //claw->SetM1VelocityPID(KD,KP,KI,QPPS);
+        //claw->SetM2VelocityPID(KD,KP,KI,QPPS);
+        //claw->ResetEncoders();
 
         ROS_INFO_COND(debug, "reading version");
         roboclaw_version = claw->ReadVersion();
         ROS_INFO_STREAM("Connected to: " << roboclaw_version);
+
+	//uint8_t mode_m1, mode_m2;
+	//if (claw->ReadEncoderModes(mode_m1, mode_m2)){
+	//    ROS_INFO("m1 mode:%d, m1 mode: %d", mode_m1, mode_m2);
+	//}
 
         js.name.push_back("base_l_wheel_joint");
         js.name.push_back("base_r_wheel_joint");
@@ -138,14 +143,15 @@ public:
 
         uint8_t status;
         bool valid1, valid2;
-        long encoder_left = last_enc_left;
+        valid1 = valid2 = true;
+	long encoder_left = last_enc_left;
         long encoder_right = last_enc_right;
 
         // read the encoder counts
         ROS_INFO_COND(debug, "reading encoders");
         try{
-            encoder_left = claw->ReadEncoderM1(status, &valid1);
-            encoder_right = claw->ReadEncoderM2(status, &valid2);
+            encoder_left = claw->ReadEncoderM1(&status, &valid1);
+            encoder_right = claw->ReadEncoderM2(&status, &valid2);
         } catch(timeout_exception& ex){
             ROS_WARN_STREAM("Error: " << ex.what());
             error_count++;
@@ -231,13 +237,10 @@ public:
         //ROS_INFO_STREAM("updating diags");
         last_diag = ros::Time::now();
         int error = -1;
-        bool valid = false;
+        bool valid = true;
         ROS_INFO_COND(debug, "reading error state");
         try{
             error = claw->ReadErrorState(&valid);
-	    if (!valid){
-	        return;
-	    }
         } catch(const timeout_exception& ex){
             ROS_WARN_STREAM("Error: " << ex.what());
             error_count++;
@@ -277,7 +280,7 @@ public:
             diag_array.status.push_back(stat);
             diag_pub.publish(diag_array);
         } else {
-            bool valid = false;
+            bool valid = true;
             int16_t m1cur, m2cur;
             double temp, battery = 1;
             diagnostic_msgs::DiagnosticStatus stat;
@@ -345,9 +348,9 @@ public:
         double right = 1.0 * lin + ang * base_width / 2.0;
         int32_t left_qpps = left * ticks_per_m;
         int32_t right_qpps = right * ticks_per_m;
-        ROS_INFO("setting speeds left:%d right:%d", left_qpps, right_qpps);
-        claw->SetMixedSpeed(-left_qpps, -right_qpps);
-        ros::Duration(0.1).sleep();
+        ROS_INFO("left speed %f qpps: %d", left, left_qpps);
+        claw->SetMixedSpeed(left_qpps, right_qpps);
+        ros::Duration(0.2).sleep();
     }
 
     void shutdown(){
@@ -365,6 +368,8 @@ public:
             }
             if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
                 claw->SetMixedSpeed(0,0);
+		last_lin_speed = 0;
+		last_ang_speed = 0;
             }
             if (error_count > MAX_ERRORS){
 		priv_nh.setParam("last_odom_x", x);

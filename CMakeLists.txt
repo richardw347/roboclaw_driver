@@ -15,7 +15,18 @@ set(SOURCE_FILES
     ${PROJECT_SOURCE_DIR}/src/RoboclawNode.cpp
 )
 
+set(TEST_FILES
+    ${PROJECT_SOURCE_DIR}/src/TimeoutSerial.h
+    ${PROJECT_SOURCE_DIR}/src/TimeoutSerial.cpp
+    ${PROJECT_SOURCE_DIR}/src/Roboclaw.h
+    ${PROJECT_SOURCE_DIR}/src/Roboclaw.cpp
+    ${PROJECT_SOURCE_DIR}/src/TestClaw.cpp
+)
+
 include_directories(include ${catkin_INCLUDE_DIRS})
 
 add_executable(roboclaw_driver ${SOURCE_FILES})
 target_link_libraries(roboclaw_driver ${catkin_LIBRARIES})
+
+add_executable(roboclaw_test ${TEST_FILES})
+target_link_libraries(roboclaw_test ${catkin_LIBRARIES})

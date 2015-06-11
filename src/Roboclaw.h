@@ -84,21 +84,22 @@ class Roboclaw{
 
 
 public:
-    Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=2);
+    Roboclaw(const std::string port, int baud_rate, uint8_t address, int timeout=1);
     ~Roboclaw();
     std::string ReadVersion();
-    int32_t ReadEncoderM1(uint8_t &status, bool *valid);
-    int32_t ReadEncoderM2(uint8_t &status, bool *valid);
-    int32_t ReadSpeedM1(uint8_t &status, bool *valid);
-    int32_t ReadSpeedM2(uint8_t &status, bool *valid);
-    int32_t ReadMainBatteryVoltage(bool *valid);
-    uint16_t ReadTemperature(bool *valid);
-    int8_t ReadErrorState(bool *valid);
+    int32_t ReadEncoderM1(uint8_t *status=NULL, bool *valid=NULL);
+    int32_t ReadEncoderM2(uint8_t *status=NULL, bool *valid=NULL);
+    int32_t ReadSpeedM1(uint8_t *status=NULL, bool *valid=NULL);
+    int32_t ReadSpeedM2(uint8_t *status=NULL, bool *valid=NULL);
+    int32_t ReadMainBatteryVoltage(bool *valid=NULL);
+    uint16_t ReadTemperature(bool *valid=NULL);
+    int8_t ReadErrorState(bool *valid=NULL);
     bool ReadCurrents(int16_t &current1, int16_t &current2);
     void SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
     void SetM2VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps);
     void SetMixedSpeed(uint32_t m1_speed, uint32_t m2_speed);
     void ResetEncoders();
+    bool ReadEncoderModes(uint8_t &M1mode, uint8_t &M2mode);
 
     enum ErrorCodes {ERR_M1_CURRENT = 1,
                      ERR_M2_CURRENT = 2,

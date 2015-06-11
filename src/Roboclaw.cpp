@@ -35,7 +35,11 @@ std::string Roboclaw::ReadVersion(){
       version[i] = read();
       crc += version[i];
       if (version[i] == 0) {
-        return version;
+          if((crc&0x7F)==this->read()){
+	      return version;
+          } else {
+              return std::string("NULL");
+	  }
       }
     }
     return std::string("NULL");
@@ -133,19 +137,30 @@ uint32_t Roboclaw::Read4_1(uint8_t cmd, uint8_t *status, bool *valid){
     return value;
 }
 
-int32_t Roboclaw::ReadEncoderM1(uint8_t &status, bool *valid){
-    return (int32_t) Read4_1(GETM1ENC, &status, valid);
+bool Roboclaw::ReadEncoderModes(uint8_t &M1mode, uint8_t &M2mode){
+
+	bool valid;
+	uint16_t value = Read2(GETENCODERMODE,&valid);
+	if(valid){
+		M1mode = value>>8;
+		M2mode = value;
+	}
+	return valid;
 }
 
-int32_t Roboclaw::ReadEncoderM2(uint8_t &status, bool *valid){
-    return (int32_t) Read4_1(GETM2ENC, &status, valid);
+int32_t Roboclaw::ReadEncoderM1(uint8_t *status, bool *valid){
+    return (int32_t) Read4_1(GETM1ENC, status, valid);
 }
 
-int32_t Roboclaw::ReadSpeedM1(uint8_t &status, bool *valid){
-    return (int32_t) Read4_1(GETM1SPEED, &status, valid);
+int32_t Roboclaw::ReadEncoderM2(uint8_t *status, bool *valid){
+    return (int32_t) Read4_1(GETM2ENC, status, valid);
 }
-int32_t Roboclaw::ReadSpeedM2(uint8_t &status, bool *valid){
-    return (int32_t) Read4_1(GETM2SPEED, &status, valid);
+
+int32_t Roboclaw::ReadSpeedM1(uint8_t *status, bool *valid){
+    return (int32_t) Read4_1(GETM1SPEED, status, valid);
+}
+int32_t Roboclaw::ReadSpeedM2(uint8_t *status, bool *valid){
+    return (int32_t) Read4_1(GETM2SPEED, status, valid);
 }
 
 uint16_t Roboclaw::ReadTemperature(bool *valid){
@@ -245,7 +260,7 @@ void Roboclaw::write(char c){
 }
 
 uint8_t Roboclaw::read(){
-    char c;
-    _t_serial->read(&c, 1);
-    return static_cast<uint8_t>(c);
+   char c;
+   _t_serial->read(&c, 1);
+   return static_cast<uint8_t>(c);
 }
