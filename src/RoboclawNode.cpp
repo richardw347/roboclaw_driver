@@ -13,11 +13,13 @@
 #include <boost/thread/mutex.hpp>
 
 #define address 0x80
-#define MAX_ERRORS 10
+#define COMMAND_DELAY 0.02
+#define DIAGNOSTICS_DELAY 2.0
+#define TWIST_CMD_TIMEOUT 3.0
 
 class RoboclawNode{
 	public:
-		RoboclawNode(): nh(), priv_nh("~"), debug(false), error_count(0){
+        RoboclawNode(): nh(), priv_nh("~") {
 			boost::mutex::scoped_lock lock(claw_mutex_);
 			priv_nh.param<std::string>("port", port, "/dev/roboclaw");
 			priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_footprint");
@@ -58,6 +60,9 @@ class RoboclawNode{
 			if(!priv_nh.getParam("last_odom_theta", theta)){
 				theta=0.0;
 			}
+            if(!priv_nh.getParam("timeout", timeout)){
+                timeout=3.0;
+            }
 
 			ROS_INFO_STREAM("Starting roboclaw node with params:");
 			ROS_INFO_STREAM("Port:\t" << port);
@@ -69,7 +74,7 @@ class RoboclawNode{
 			ROS_INFO_STREAM("KD:\t" << KD);
 			ROS_INFO_STREAM("QPPS:\t" << QPPS);
 
-			claw = new Roboclaw(port, baud_rate, address);
+            claw = new Roboclaw(port, baud_rate, address, timeout);
 			last_motor = ros::Time::now();
 
 			//x = y = theta = 0.0;
@@ -90,19 +95,24 @@ class RoboclawNode{
 			joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
 			battery_pub = nh.advertise<std_msgs::Float64>("battery_voltage", 1);
 
-			if(!claw->SetM1VelocityPID(KD,KP,KI,QPPS)){
-			    ROS_ERROR("Error setting M1 params");
-			    ros::shutdown();
-			}
-			if(!claw->SetM2VelocityPID(KD,KP,KI,QPPS)){
-			    ROS_ERROR("Error setting M2 params");
-			    ros::shutdown();
-			}
-			
-			roboclaw_version = claw->ReadVersion();
-			ROS_INFO_STREAM("Connected to: " << roboclaw_version);
+            try{
+                if(!claw->SetM1VelocityPID(KD,KP,KI,QPPS)){
+                    ROS_ERROR("Error setting M1 params");
+                    ros::shutdown();
+                }
+                if(!claw->SetM2VelocityPID(KD,KP,KI,QPPS)){
+                    ROS_ERROR("Error setting M2 params");
+                    ros::shutdown();
+                }
 
-			js.name.push_back("base_l_wheel_joint");
+                roboclaw_version = claw->ReadVersion();
+                ROS_INFO_STREAM("Connected to: " << roboclaw_version);
+
+            } catch (timeout_exception ex){
+                ROS_WARN("Serial timeout error: %s", ex.what());
+            }
+
+            js.name.push_back("base_l_wheel_joint");
 			js.name.push_back("base_r_wheel_joint");
 			js.position.push_back(0.0);
 			js.position.push_back(0.0);
@@ -129,7 +139,7 @@ class RoboclawNode{
 			return true;
 		}
 
-		void upateOdom() throw (boost::system::system_error){
+        void upateOdom(){
 
 			boost::mutex::scoped_lock lock(claw_mutex_);
 			//ROS_INFO_STREAM("updating odom");
@@ -147,7 +157,9 @@ class RoboclawNode{
 
 			// read the encoder counts
 			encoder_left = claw->ReadEncoderM1(&status, &valid1);
+            ros::Duration(COMMAND_DELAY).sleep();
 			encoder_right = claw->ReadEncoderM2(&status, &valid2);
+            ros::Duration(COMMAND_DELAY).sleep();
 
 			if (!valid1 && !(status == 0 || status == 1)){
 				ROS_WARN("Invalid encoder data on motor 1");
@@ -158,7 +170,6 @@ class RoboclawNode{
 				return;
 			} 
 
-			error_count = 0;
 			// calculate distance travelled by each wheel
 			double dist_left = (float)(encoder_left - last_enc_left) / ticks_per_m;
 			double dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
@@ -206,9 +217,9 @@ class RoboclawNode{
 
 			js.header.stamp = ros::Time::now();
 			joint_pub.publish(js);
-			//ROS_INFO_STREAM("odom updated");
 		}
-		void resetEncoders() {
+
+        void resetEncoders() {
 			return;
 			boost::mutex::scoped_lock lock(claw_mutex_);
 			if (vx == 0 && vth == 0){
@@ -218,12 +229,13 @@ class RoboclawNode{
 			}
 		}
 
-		void updateDiagnostics() throw (boost::system::system_error){
+        void updateDiagnostics(){
 			boost::mutex::scoped_lock lock(claw_mutex_);
 			last_diag = ros::Time::now();
 			int error = -1;
 			bool valid = true;
 			error = claw->ReadErrorState(&valid);
+            ros::Duration(COMMAND_DELAY).sleep();
 			std::vector<std::string> messages;
 			diagnostic_msgs::DiagnosticArray diag_array;
 			diag_array.header.stamp = ros::Time::now();
@@ -266,16 +278,16 @@ class RoboclawNode{
 				stat.hardware_id = roboclaw_version;
 				stat.level = stat.OK;
 				stat.message = "Running";
-				ROS_INFO_COND(debug, "getting temp");
 				temp = claw->ReadTemperature(&valid);
+                ros::Duration(COMMAND_DELAY).sleep();
 				if (valid){
 					diagnostic_msgs::KeyValue kv;
 					kv.key = "Temperature (Degrees C)";
 					kv.value = boost::lexical_cast<std::string>((double)temp/10.0);
 					stat.values.push_back(kv);
 				}
-				ROS_INFO_COND(debug, "getting battery");
 				battery = claw->ReadMainBatteryVoltage(&valid);
+                ros::Duration(COMMAND_DELAY).sleep();
 				if (valid){
 					diagnostic_msgs::KeyValue kv;
 					kv.key = "Voltage (V)";
@@ -286,9 +298,9 @@ class RoboclawNode{
 					kv.value = boost::lexical_cast<std::string>(battery_voltage);
 					stat.values.push_back(kv);
 				}
-				ROS_INFO_COND(debug, "getting currents");
 				if (claw->ReadCurrents(m1cur, m2cur)){
-					diagnostic_msgs::KeyValue kv;
+                    ros::Duration(COMMAND_DELAY).sleep();
+                    diagnostic_msgs::KeyValue kv;
 					kv.key = "Motor1 Current (A)";
 					kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
 					stat.values.push_back(kv);
@@ -304,7 +316,7 @@ class RoboclawNode{
 
 		}
 
-		void twistCb(geometry_msgs::Twist msg)throw (boost::system::system_error){
+        void twistCb(geometry_msgs::Twist msg){
 			boost::mutex::scoped_lock lock(claw_mutex_);
 			last_motor = ros::Time::now();
 			double lin = msg.linear.x;
@@ -319,38 +331,47 @@ class RoboclawNode{
 			double right = 1.0 * lin + ang * base_width / 2.0;
 			int16_t left_qpps = left * ticks_per_m;
 			int16_t right_qpps = right * ticks_per_m;
-			ROS_INFO("left speed %f qpps: %d", left, left_qpps);
-			claw->SetMixedSpeed(left_qpps, right_qpps);
-			ros::Duration(0.2).sleep();
+            try{
+                claw->SetMixedSpeed(left_qpps, right_qpps);
+            } catch (timeout_exception ex){
+                ROS_WARN("Serial timeout error %s", ex.what());
+            }
+
+            ros::Duration(COMMAND_DELAY).sleep();
 		}
 
 		void shutdown(){
-			claw->SetMixedSpeed(0, 0);
+            claw->SetMixedSpeed(0, 0);
 		}
 
 		void spin(){
 			ros::Rate r(update_rate);
 			while (ros::ok()){
-				ros::spinOnce();
-				this->upateOdom();
-				if (ros::Time::now() > (last_diag + ros::Duration(2.0))){
-					this->updateDiagnostics();
-					this->resetEncoders();
-				}
-				if (ros::Time::now() > (last_motor + ros::Duration(3.0))){
-					claw->SetMixedSpeed(0,0);
-					last_lin_speed = 0;
-					last_ang_speed = 0;
-				}
-				if (error_count > MAX_ERRORS){
-					priv_nh.setParam("last_odom_x", x);
-					priv_nh.setParam("last_odom_y", y);
-					priv_nh.setParam("last_odom_theta", theta);
-					ROS_ERROR("Error limit reached shutting down");
-					break;
-				}
+                try{
+                    ros::spinOnce();
+                    this->upateOdom();
+                    /*if (ros::Time::now() > (last_diag + ros::Duration(DIAGNOSTICS_DELAY))){
+                        this->updateDiagnostics();
+                        this->resetEncoders();
+                    }*/
+                    if (ros::Time::now() > (last_motor + ros::Duration(TWIST_CMD_TIMEOUT))){
+                        claw->SetMixedSpeed(0,0);
+                        last_lin_speed = 0;
+                        last_ang_speed = 0;
+                        ros::Duration(COMMAND_DELAY).sleep();
+                    }
+                } catch (timeout_exception ex){
+                    ROS_WARN("Serial timeout error %s", ex.what());
+                } catch (boost::system::system_error e){
+                    std::cout << "\nError running node: " << e.code() << " " << e.what() << std::endl;
+                    break;
+                }
+
 				r.sleep();
 			}
+            priv_nh.setParam("last_odom_x", x);
+            priv_nh.setParam("last_odom_y", y);
+            priv_nh.setParam("last_odom_theta", theta);
 			this->shutdown();
 		}
 
@@ -383,24 +404,21 @@ class RoboclawNode{
 		tf::TransformBroadcaster br;
 		sensor_msgs::JointState js;
 		ros::ServiceServer calib_server;
-		bool debug;
-		int error_count;
 		double battery_voltage;
+        double timeout;
 		double last_lin_speed, last_ang_speed;
 };
 
 
 int main(int argc, char **argv){
 	ros::init(argc, argv, "roboclaw_driver");
-	try{
-		RoboclawNode node;
-		node.spin();
-	} catch(const boost::system::system_error& ex){
-		ROS_ERROR_STREAM("IO error " << ex.what());
-		return -1;
-	} catch (std::exception &ex){
-		ROS_ERROR_STREAM("General error " << ex.what());
-		return -1;
-	}
-	return 0;
+    try{
+        RoboclawNode node;
+        node.spin();
+    } catch (boost::system::system_error e){
+        std::cout << "\nError starting node: " << e.code() << " " << e.what() << std::endl;
+    }
+
+
+    return 0;
 }

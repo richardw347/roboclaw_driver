@@ -5,7 +5,7 @@
 int main(){
     
     // connect to device
-    Roboclaw cl(std::string("/dev/ttyS2"), 38400, address);
+    Roboclaw cl(std::string("/dev/ttyACM0"), 1000000, address);
     
     // get firmware version
     std::cout << "Connected to " << cl.ReadVersion() << std::endl;

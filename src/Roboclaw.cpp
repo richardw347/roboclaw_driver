@@ -4,7 +4,7 @@ Roboclaw::Roboclaw(const std::string port, int baud_rate, uint8_t address, float
 {
     _address = address;
     _t_serial = new TimeoutSerial(port, baud_rate);
-    _t_serial->setTimeout(posix_time::seconds(1));
+    _t_serial->setTimeout(posix_time::seconds(timeout));
 
 }
 Roboclaw::~Roboclaw(){
@@ -158,22 +158,9 @@ uint16_t Roboclaw::ReadTemperature(bool *valid){
     return temp;
 }
 
-int8_t Roboclaw::ReadErrorState(bool *valid){
-    uint8_t crc;
-    write(_address);
-    crc=_address;
-    write(GETERROR);
-    crc+=GETERROR;
+uint16_t Roboclaw::ReadErrorState(bool *valid){
 
-    uint8_t value = read();
-    crc+=value;
-
-    if(valid)
-        *valid = ((crc&0x7F)==read());
-    else
-        read();
-
-    return value;
+    return Read2(GETERROR, valid);
 }
 
 void Roboclaw::ResetEncoders(){
@@ -193,9 +180,6 @@ bool Roboclaw::ReadCurrents(int16_t &current1, int16_t &current2){
   }
   return valid;
 }
-
-#define SetDWORDval(arg) (uint8_t)(arg>>24),(uint8_t)(arg>>16),(uint8_t)(arg>>8),(uint8_t)arg
-#define SetWORDval(arg) (uint8_t)(arg>>8),(uint8_t)arg
 
 bool Roboclaw::SetM1VelocityPID(float kd_fp, float kp_fp, float ki_fp, uint32_t qpps){
 
