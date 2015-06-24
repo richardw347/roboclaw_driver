@@ -4,13 +4,12 @@
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/JointState.h>
-#include <diagnostic_msgs/DiagnosticArray.h>
 #include <std_srvs/Empty.h>
 #include <std_srvs/EmptyRequest.h>
 #include <std_srvs/EmptyResponse.h>
-#include <std_msgs/Float64.h>
 #include "RoboClaw.h"
 #include <boost/thread/mutex.hpp>
+#include <roboclaw_driver/RoboClawState.h>
 
 #define address 0x80
 #define DIAGNOSTICS_DELAY 2.0
@@ -59,9 +58,7 @@ public:
     if(!priv_nh.getParam("last_odom_theta", theta)){
         theta=0.0;
       }
-    if(!priv_nh.getParam("timeout", timeout)){
-        timeout=3.0;
-      }
+
 
     ROS_INFO_STREAM("Starting roboclaw node with params:");
     ROS_INFO_STREAM("Port:\t" << port);
@@ -79,8 +76,7 @@ public:
     claw.reset(new RoboClaw(ser.get()));
 
     last_motor = ros::Time::now();
-
-    //x = y = theta = 0.0;
+    target_left_qpps = target_right_qpps = 0;
     vx = vth = 0;
     last_odom  = ros::Time::now();
 
@@ -92,10 +88,9 @@ public:
     odom.pose.pose.position.z = 0.0;
 
     cmd_vel_sub = nh.subscribe("cmd_vel", 1, &RoboclawNode::twistCb, this);
-    diag_pub = nh.advertise<diagnostic_msgs::DiagnosticArray>("diagnostics", 1);
     odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
     joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
-    battery_pub = nh.advertise<std_msgs::Float64>("battery_voltage", 1);
+    state_pub = nh.advertise<roboclaw_driver::RoboClawState>("roboclaw_state", 1);
 
     try{
       claw->SetM1Constants(address,KD,KP,KI,QPPS);
@@ -230,6 +225,9 @@ public:
     vx = (left_speed + right_speed) / 2.0;
     vth = (left_speed - right_speed) / base_width;
 
+    state.linear_velocity = vx;
+    state.angular_velocity = vth;
+
     double dx, dy, dth;
     dx = vx * dt * cos(theta);
     dy = vx * dt * sin(theta);
@@ -261,162 +259,86 @@ public:
     joint_pub.publish(js);
   }
 
-  void updateDiagnostics(){
+  void updateSpeeds(int left_speed, int right_speed){
     boost::mutex::scoped_lock lock(claw_mutex_);
-    last_diag = ros::Time::now();
-    int error = -1;
-    bool valid = true;
-    error = claw->ReadError(address, &valid);
-    std::vector<std::string> messages;
-    diagnostic_msgs::DiagnosticArray diag_array;
-    diag_array.header.stamp = ros::Time::now();
-    if (error != 0){
-        // parse the error string
-        if ((error & RoboClaw::ERR_M1_CURRENT) == RoboClaw::ERR_M1_CURRENT){
-            messages.push_back("Motor1 OverCurrent");
-            ROS_WARN("Motor1 OverCurrent");
-          }
-        else if ((error & RoboClaw::ERR_M2_CURRENT) == RoboClaw::ERR_M2_CURRENT){
-            messages.push_back("Motor2 OverCurrent");
-            ROS_WARN("Motor2 OverCurrent");
-          }
-        else if ((error & RoboClaw::ERR_E_STOP) == RoboClaw::ERR_E_STOP)
-          messages.push_back("Emergency Stop");
-        else if ((error & RoboClaw::ERR_TEMP) == RoboClaw::ERR_TEMP)
-          messages.push_back("Temperature");
-        else if ((error & RoboClaw::ERR_MAIN_BATT_HIGH) == RoboClaw::ERR_MAIN_BATT_HIGH)
-          messages.push_back("Main Battery High");
-        else if ((error & RoboClaw::ERR_MAIN_BATT_LOW) == RoboClaw::ERR_MAIN_BATT_LOW)
-          messages.push_back("Main Battery Low");
-        else if ((error & RoboClaw::ERR_LOGIC_BATT_HIGH) == RoboClaw::ERR_LOGIC_BATT_HIGH)
-          messages.push_back("Logic Battery High");
-        else if ((error & RoboClaw::ERR_LOGIC_BATT_HIGH) == RoboClaw::ERR_LOGIC_BATT_HIGH)
-          messages.push_back("Logic Battery Low");
+    try{
+      claw->SpeedM1M2(address, left_speed, right_speed);
+    }  catch(USBSerial::Exception &e) {
+      ROS_WARN("Error setting motor speeds (error=%s)", e.what());
+      serial_error();
+      return;
+    }
 
-        diagnostic_msgs::DiagnosticStatus stat;
-        stat.name = "Roboclaw";
-        stat.hardware_id = roboclaw_version;
-        stat.level = stat.ERROR;
-        stat.message = std::accumulate(messages.begin(), messages.end(), std::string(""));
-        diag_array.status.push_back(stat);
-        diag_pub.publish(diag_array);
-      } else {
-        bool valid = true;
-        int16_t m1cur, m2cur;
-        double battery, temp = 0.0;
-        diagnostic_msgs::DiagnosticStatus stat;
-        stat.name = "Roboclaw";
-        stat.hardware_id = roboclaw_version;
-        stat.level = stat.OK;
-        stat.message = "Running";
-        /*temp = claw->Read ReadTemperature(&valid);
-        ros::Duration(COMMAND_DELAY).sleep();
-        if (valid){
-            diagnostic_msgs::KeyValue kv;
-            kv.key = "Temperature (Degrees C)";
-            kv.value = boost::lexical_cast<std::string>((double)temp/10.0);
-            stat.values.push_back(kv);
-        }*/
-        battery = claw->ReadMainBatteryVoltage(address, &valid);
-        if (valid){
-            diagnostic_msgs::KeyValue kv;
-            kv.key = "Voltage (V)";
-            battery_voltage = (double)battery/10.0;
-            std_msgs::Float64 flt;
-            flt.data = battery_voltage;
-            battery_pub.publish(flt);
-            kv.value = boost::lexical_cast<std::string>(battery_voltage);
-            stat.values.push_back(kv);
-          }
-        if (claw->ReadCurrents(address, m1cur, m2cur)){
-            diagnostic_msgs::KeyValue kv;
-            kv.key = "Motor1 Current (A)";
-            kv.value = boost::lexical_cast<std::string>((double)m1cur/100.0);
-            stat.values.push_back(kv);
+  }
 
-            kv.key = "Motor2 Current (A)";
-            kv.value = boost::lexical_cast<std::string>((double)m2cur/100.0);
-            stat.values.push_back(kv);
-          }
+  void updateState(){
+    boost::mutex::scoped_lock lock(claw_mutex_);
 
-        diag_array.status.push_back(stat);
-        diag_pub.publish(diag_array);
+    bool valid = false;
+    try{
+      double battery = 0.0;
+      battery = claw->ReadMainBatteryVoltage(address, &valid);
+      if (valid){
+          state.battery_voltage = (double)battery/10.0;
       }
+    }  catch(USBSerial::Exception &e) {
+      ROS_WARN("Error reading battery voltage (error=%s)", e.what());
+      serial_error();
+      return;
+    }
 
+    try{
+      int16_t m1cur, m2cur;
+      valid = claw->ReadCurrents(address, m1cur, m2cur);
+      if (valid){
+          state.left_motor_current = (double)m1cur/100.0;
+          state.right_motor_current = (double)m2cur/100.0;
+      }
+    }  catch(USBSerial::Exception &e) {
+      ROS_WARN("Error reading motor currents (error=%s)", e.what());
+      serial_error();
+      return;
+    }
+    state_pub.publish(state);
+    last_state = ros::Time::now();
   }
 
   void twistCb(geometry_msgs::Twist msg){
-    boost::mutex::scoped_lock lock(claw_mutex_);
     last_motor = ros::Time::now();
     double lin = msg.linear.x;
     double ang = msg.angular.z;
-    if (lin == last_lin_speed && ang == last_ang_speed){
-        return;
-      } else {
-        last_lin_speed = lin;
-        last_ang_speed = ang;
-      }
     double left = 1.0 * lin - ang * base_width / 2.0;
     double right = 1.0 * lin + ang * base_width / 2.0;
-    int16_t left_qpps = left * ticks_per_m;
-    int16_t right_qpps = right * ticks_per_m;
-    try{
-      claw->SpeedM1M2(address, left_qpps, right_qpps);
-    }  catch(USBSerial::Exception &e) {
-      ROS_WARN("Error setting motor speeds (error=%s)", e.what());
-      serial_error();
-      return;
-    }
-
+    target_left_qpps = left * ticks_per_m;
+    target_right_qpps = right * ticks_per_m;
   }
 
   void shutdown(){
-    try{
-      claw->SpeedM1M2(address, 0, 0);
-    }  catch(USBSerial::Exception &e) {
-      ROS_WARN("Error setting motor speeds (error=%s)", e.what());
-      serial_error();
-      return;
-    }
+
   }
 
   void spin(){
     ros::Rate r(update_rate);
     while (ros::ok()){
         ros::spinOnce();
-        this->upateOdom();
-        if (ros::Time::now() > (last_diag + ros::Duration(DIAGNOSTICS_DELAY))){
-            try{
-              this->updateDiagnostics();
-
-            } catch(USBSerial::Exception &e) {
-              ROS_WARN("Error setting motor speeds (error=%s)", e.what());
-              serial_error();
-            }
+        if (ros::Time::now() > (last_state + ros::Duration(DIAGNOSTICS_DELAY))){
+            this->updateState();
           }
         if (ros::Time::now() > (last_motor + ros::Duration(TWIST_CMD_TIMEOUT))){
-            try{
-              claw->SpeedM1M2(address, 0, 0);
-            }  catch(USBSerial::Exception &e) {
-              ROS_WARN("Error setting motor speeds (error=%s)", e.what());
-              serial_error();
-              return;
-            }
-            last_lin_speed = 0;
-            last_ang_speed = 0;
+            target_left_qpps = target_right_qpps = 0;
           }
-
+        //this->upateOdom();
+        this->updateSpeeds(target_left_qpps, target_right_qpps);
         r.sleep();
       }
-
-    this->shutdown();
+    this->updateSpeeds(0, 0);
   }
 
 
 private:
   ros::NodeHandle nh, priv_nh;
   ros::Subscriber cmd_vel_sub;
-  ros::Publisher odom_pub, diag_pub, joint_pub, battery_pub;
+  ros::Publisher odom_pub, joint_pub, state_pub;
   std::string port;
   int baud_rate;
   int update_rate;
@@ -432,19 +354,18 @@ private:
   boost::scoped_ptr<USBSerial> ser;
   boost::mutex claw_mutex_;
 
+  roboclaw_driver::RoboClawState state;
+  int target_left_qpps, target_right_qpps;
   double x, y, theta, vx, vth;
   int left_dir, right_dir;
   ros::Time last_odom;
   nav_msgs::Odometry odom;
   geometry_msgs::Quaternion quaternion;
-  ros::Time last_diag;
+  ros::Time last_state;
   std::string roboclaw_version;
   tf::TransformBroadcaster br;
   sensor_msgs::JointState js;
   ros::ServiceServer calib_server;
-  double battery_voltage;
-  double timeout;
-  double last_lin_speed, last_ang_speed;
   int serial_errs;
 };
 

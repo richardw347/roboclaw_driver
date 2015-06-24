@@ -103,14 +103,15 @@ public:
   RoboClaw(USBSerial *ser);
   ~RoboClaw();
 
-  enum ErrorCodes {ERR_M1_CURRENT = 1,
-                   ERR_M2_CURRENT = 2,
-                   ERR_E_STOP = 4,
-                   ERR_TEMP = 8,
-                   ERR_MAIN_BATT_HIGH = 10,
-                   ERR_MAIN_BATT_LOW = 32,
-                   ERR_LOGIC_BATT_HIGH = 64,
-                   ERR_LOGIC_BATT_LOW = 128};
+  enum ErrorCodes {NORMAL = 0x00,
+                   ERR_M1_CURRENT = 0x01,
+                   ERR_M2_CURRENT = 0x02,
+                   ERR_E_STOP = 0x04,
+                   ERR_TEMP = 0x08,
+                   ERR_MAIN_BATT_HIGH = 0x10,
+                   ERR_MAIN_BATT_LOW = 0x20,
+                   ERR_LOGIC_BATT_HIGH = 0x40,
+                   ERR_LOGIC_BATT_LOW = 0x80};
 
   void ForwardM1(uint8_t address, uint8_t speed);
   void BackwardM1(uint8_t address, uint8_t speed);
