@@ -14,6 +14,7 @@
 #define address 0x80
 #define DIAGNOSTICS_DELAY 2.0
 #define TWIST_CMD_TIMEOUT 3.0
+#define MAX_ERRORS 5
 
 class RoboclawNode{
 public:
@@ -57,6 +58,13 @@ public:
       }
     if(!priv_nh.getParam("last_odom_theta", theta)){
         theta=0.0;
+      }
+
+    if(!priv_nh.getParam("left_motor_direction", left_dir)){
+        left_dir = 0;
+      }
+    if(!priv_nh.getParam("right_motor_direction", right_dir)){
+        right_dir = 0;
       }
 
 
@@ -142,7 +150,7 @@ public:
 
   void serial_error() {
     serial_errs += 1;
-    if (serial_errs == 5) {
+    if (serial_errs == MAX_ERRORS) {
         ROS_ERROR("Several errors from roboclaw, restarting");
         roboclaw_restart_usb();
         open_usb();
@@ -194,9 +202,10 @@ public:
     }
 
     if (valid && (status == 0 || status == 1)) {
-        left_qpps = left_dir * speed;
+        left_qpps = speed;
       } else {
-        ROS_WARN("Invalid data from motor 1");
+        ROS_INFO("M1 valid: %d, status: %d", valid, status);
+	ROS_WARN("Invalid data from motor 1");
         serial_error();
         return;
       }
@@ -210,8 +219,9 @@ public:
     }
 
     if (valid && (status == 0 || status == 1)) {
-        right_qpps = right_dir * speed;
+        right_qpps = speed;
       } else {
+	ROS_INFO("M1 valid: %d, status: %d", valid, status);
         ROS_WARN("Invalid data from motor 2");
         serial_error();
         return;
@@ -262,7 +272,7 @@ public:
   void updateSpeeds(int left_speed, int right_speed){
     boost::mutex::scoped_lock lock(claw_mutex_);
     try{
-      claw->SpeedM1M2(address, left_speed, right_speed);
+      claw->SpeedM1M2(address, right_speed, left_speed);
     }  catch(USBSerial::Exception &e) {
       ROS_WARN("Error setting motor speeds (error=%s)", e.what());
       serial_error();
@@ -309,11 +319,10 @@ public:
     double ang = msg.angular.z;
     double left = 1.0 * lin - ang * base_width / 2.0;
     double right = 1.0 * lin + ang * base_width / 2.0;
-    target_left_qpps = left * ticks_per_m;
-    target_right_qpps = right * ticks_per_m;
-  }
-
-  void shutdown(){
+    target_left_qpps = left * ticks_per_m * left_dir;
+    target_right_qpps = right * ticks_per_m * right_dir;
+ }
+ void shutdown(){
 
   }
 
@@ -327,7 +336,7 @@ public:
         if (ros::Time::now() > (last_motor + ros::Duration(TWIST_CMD_TIMEOUT))){
             target_left_qpps = target_right_qpps = 0;
           }
-        //this->upateOdom();
+        this->upateOdom();
         this->updateSpeeds(target_left_qpps, target_right_qpps);
         r.sleep();
       }
@@ -357,7 +366,6 @@ private:
   roboclaw_driver::RoboClawState state;
   int target_left_qpps, target_right_qpps;
   double x, y, theta, vx, vth;
-  int left_dir, right_dir;
   ros::Time last_odom;
   nav_msgs::Odometry odom;
   geometry_msgs::Quaternion quaternion;
@@ -367,6 +375,7 @@ private:
   sensor_msgs::JointState js;
   ros::ServiceServer calib_server;
   int serial_errs;
+  int left_dir, right_dir;
 };
 
 
