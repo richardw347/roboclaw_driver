@@ -40,24 +40,49 @@ public:
     if(!priv_nh.getParam("max_acceleration", max_accel)){
         max_accel = 1.0;
     }
-
+   if(!priv_nh.getParam("KP", KP)){
+        KP = 0.1;
+      }
+    if(!priv_nh.getParam("KI", KI)){
+        KI = 0.5;
+      }
+    if(!priv_nh.getParam("KD", KD)){
+        KD = 0.25;
+      }
+    if(!priv_nh.getParam("QPPS", QPPS)){
+        QPPS = 11600;
+      }
+    if(!priv_nh.getParam("left_motor_direction", left_dir)){
+        left_dir = 1;
+      }
+    if(!priv_nh.getParam("right_motor_direction", right_dir)){
+        right_dir = 1;
+      }   
 
     ROS_INFO_STREAM("Starting roboclaw node with params:");
     ROS_INFO_STREAM("Port:\t" << port);
     ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
     ROS_INFO_STREAM("Base Width:\t" << base_width);
     ROS_INFO_STREAM("Ticks Per Metre:\t" << ticks_per_m);
+    ROS_INFO_STREAM("KP:\t" << KP);
+    ROS_INFO_STREAM("KI:\t" << KI);
+    ROS_INFO_STREAM("KD:\t" << KD);
+    ROS_INFO_STREAM("QPPS:\t" << QPPS);
+    ROS_INFO_STREAM("Robot Dir:\t" << robot_dir);
+
 
     serial_errs = 0;
     ser.reset(new USBSerial());
     open_usb();
     claw.reset(new RoboClaw(ser.get()));
 
+
     max_accel_qpps = max_accel * ticks_per_m;
     last_motor = ros::Time::now();
     target_left_qpps = target_right_qpps = 0;
     vx = vth = 0;
     last_odom  = ros::Time::now();
+    last_enc_left = last_enc_right = 0;
 
     quaternion.x = 0.0;
     quaternion.y = 0.0;
@@ -72,6 +97,8 @@ public:
     state_pub = nh.advertise<roboclaw_driver::RoboClawState>("roboclaw_state", 1);
 
     try{
+      claw->SetM1Constants(address,KD,KP,KI,QPPS);
+      claw->SetM2Constants(address,KD,KP,KI,QPPS);
       claw->ReadVersion(address, &roboclaw_version);
       ROS_INFO_STREAM("Connected to: " << roboclaw_version);
     } catch (USBSerial::Exception &e) {
@@ -161,16 +188,17 @@ public:
     bool valid;
     int32_t left_qpps, right_qpps = 0;
 
+    int32_t encoder_left, encoder_right;
+    int32_t counts;
     try {
-      speed = claw->ReadISpeedM1(address, &status, &valid) * 125;
+	counts = claw->ReadEncM1(address, &status, &valid);
     } catch (USBSerial::Exception &e) {
       ROS_WARN("Problem reading motor 1 speed (error=%s)", e.what());
       serial_error();
       return;
     }
-
-    if (valid && (status == 0 || status == 1)) {
-        left_qpps = speed;
+   if (valid) {
+        encoder_left = counts;
       } else {
         ROS_INFO("M1 valid: %d, status: %d", valid, status);
 	ROS_WARN("Invalid data from motor 1");
@@ -179,45 +207,58 @@ public:
       }
 
     try {
-      speed = claw->ReadISpeedM2(address, &status, &valid) * 125;
-    } catch(USBSerial::Exception &e) {
-      ROS_WARN("Problem reading motor 2 speed (error=%s)", e.what());
+        counts = claw->ReadEncM2(address, &status, &valid);
+    } catch (USBSerial::Exception &e) {
+      ROS_WARN("Problem reading motor 1 speed (error=%s)", e.what());
       serial_error();
       return;
     }
 
-    if (valid && (status == 0 || status == 1)) {
-        right_qpps = speed;
+
+  if (valid) {
+        encoder_right = counts;
       } else {
-	ROS_INFO("M1 valid: %d, status: %d", valid, status);
-        ROS_WARN("Invalid data from motor 2");
+        ROS_INFO("M1 valid: %d, status: %d", valid, status);
+	ROS_WARN("Invalid data from motor 1");
         serial_error();
         return;
       }
 
-    double left_speed, right_speed = 0.0;
+    double dist_left, dist_right = 0.0;
 
     if (robot_dir){
-    	left_speed = left_qpps / ticks_per_m;
-	right_speed = right_qpps / ticks_per_m;
+        dist_left = (float)(encoder_left - last_enc_left) / ticks_per_m;
+        dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
+
     } else {
-    	right_speed = left_qpps / ticks_per_m;
-	left_speed = right_qpps / ticks_per_m;
+    	dist_left = (float)(encoder_left - last_enc_left) / ticks_per_m;
+    	dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
+
     }
-    vx = (left_speed + right_speed) / 2.0;
-    vth = (right_speed - left_speed) / base_width;
 
-    state.linear_velocity = vx;
-    state.angular_velocity = vth;
+    last_enc_left = encoder_left;
+    last_enc_right = encoder_right;
 
-    double dx, dy, dth;
-    dx = vx * dt * cos(theta);
-    dy = vx * dt * sin(theta);
-    dth = vth * dt;
 
-    x += dx;
-    y += dy;
-    theta += dth;
+    // distance robot has travelled is the average of the distance travelled by both
+    // wheels
+    double dist_travelled = (dist_left + dist_right) / 2;
+    // calculate appoximate heading change (radians), this works for small angles
+    double delta_th = (dist_right - dist_left) / base_width;
+    vx = dist_travelled / dt;
+    vth = delta_th / dt;
+
+    if (dist_travelled != 0){
+        double delta_x = cos(delta_th) * dist_travelled;
+	double delta_y = -sin(delta_th) * dist_travelled;
+	x += (cos(theta) * delta_x - sin(theta) * delta_y);
+	y += (sin(theta) * delta_x + cos(theta) * delta_y);
+    }
+
+   if (delta_th != 0){
+	theta += delta_th;
+   }
+
 
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(x,y,0.0));
@@ -295,8 +336,8 @@ public:
     double ang = msg.angular.z;
     double left = 1.0 * lin - ang * base_width / 2.0;
     double right = 1.0 * lin + ang * base_width / 2.0;
-    target_left_qpps = left * ticks_per_m;
-    target_right_qpps = right * ticks_per_m;
+    target_left_qpps = left * ticks_per_m * left_dir;
+    target_right_qpps = right * ticks_per_m * right_dir;
  }
  void shutdown(){
 
@@ -329,6 +370,10 @@ private:
   int update_rate;
   double base_width;
   double ticks_per_m;
+  double KP;
+  double KI;
+  double KD;
+  int QPPS;
   std::string base_frame_id;
   ros::Time last_motor;
   boost::scoped_ptr<RoboClaw> claw;
@@ -338,6 +383,7 @@ private:
   roboclaw_driver::RoboClawState state;
   int target_left_qpps, target_right_qpps;
   double x, y, theta, vx, vth;
+  long last_enc_left, last_enc_right;
   ros::Time last_odom;
   nav_msgs::Odometry odom;
   geometry_msgs::Quaternion quaternion;
@@ -347,7 +393,7 @@ private:
   sensor_msgs::JointState js;
   ros::ServiceServer calib_server;
   int serial_errs;
-  int robot_dir;
+  int left_dir, right_dir, robot_dir;
   double max_accel;
   int max_accel_qpps;
 };
