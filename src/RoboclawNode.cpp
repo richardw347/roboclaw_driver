@@ -34,38 +34,12 @@ public:
     if(!priv_nh.getParam("ticks_per_metre", ticks_per_m)){
         ticks_per_m = 21738;
       }
-    if(!priv_nh.getParam("KP", KP)){
-        KP = 0.1;
-      }
-    if(!priv_nh.getParam("KI", KI)){
-        KI = 0.5;
-      }
-    if(!priv_nh.getParam("KD", KD)){
-        KD = 0.25;
-      }
-    if(!priv_nh.getParam("QPPS", QPPS)){
-        QPPS = 11600;
-      }
-    if(!priv_nh.getParam("last_odom_x", x)){
-        x=0.0;
-      } else {
-        ROS_INFO_STREAM("setting X postion to " << x);
-      }
-    if(!priv_nh.getParam("last_odom_y", y)){
-        y=0.0;
-      } else {
-        ROS_INFO_STREAM("setting Y position to " << y);
-      }
-    if(!priv_nh.getParam("last_odom_theta", theta)){
-        theta=0.0;
-      }
-
-    if(!priv_nh.getParam("left_motor_direction", left_dir)){
-        left_dir = 0;
-      }
-    if(!priv_nh.getParam("right_motor_direction", right_dir)){
-        right_dir = 0;
-      }
+    if(!priv_nh.getParam("robot_direction", robot_dir)){
+        robot_dir = 0;
+    }
+    if(!priv_nh.getParam("max_acceleration", max_accel)){
+        max_accel = 1.0;
+    }
 
 
     ROS_INFO_STREAM("Starting roboclaw node with params:");
@@ -73,16 +47,13 @@ public:
     ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
     ROS_INFO_STREAM("Base Width:\t" << base_width);
     ROS_INFO_STREAM("Ticks Per Metre:\t" << ticks_per_m);
-    ROS_INFO_STREAM("KP:\t" << KP);
-    ROS_INFO_STREAM("KI:\t" << KI);
-    ROS_INFO_STREAM("KD:\t" << KD);
-    ROS_INFO_STREAM("QPPS:\t" << QPPS);
 
     serial_errs = 0;
     ser.reset(new USBSerial());
     open_usb();
     claw.reset(new RoboClaw(ser.get()));
 
+    max_accel_qpps = max_accel * ticks_per_m;
     last_motor = ros::Time::now();
     target_left_qpps = target_right_qpps = 0;
     vx = vth = 0;
@@ -101,11 +72,8 @@ public:
     state_pub = nh.advertise<roboclaw_driver::RoboClawState>("roboclaw_state", 1);
 
     try{
-      claw->SetM1Constants(address,KD,KP,KI,QPPS);
-      claw->SetM2Constants(address,KD,KP,KI,QPPS);
       claw->ReadVersion(address, &roboclaw_version);
       ROS_INFO_STREAM("Connected to: " << roboclaw_version);
-
     } catch (USBSerial::Exception &e) {
       ROS_WARN("Problem setting PID constants (error=%s)", e.what());
       serial_error();
@@ -229,11 +197,15 @@ public:
 
     double left_speed, right_speed = 0.0;
 
-    left_speed = left_qpps / ticks_per_m;
-    right_speed = right_qpps / ticks_per_m;
-
+    if (robot_dir){
+    	left_speed = left_qpps / ticks_per_m;
+	right_speed = right_qpps / ticks_per_m;
+    } else {
+    	right_speed = left_qpps / ticks_per_m;
+	left_speed = right_qpps / ticks_per_m;
+    }
     vx = (left_speed + right_speed) / 2.0;
-    vth = (left_speed - right_speed) / base_width;
+    vth = (right_speed - left_speed) / base_width;
 
     state.linear_velocity = vx;
     state.angular_velocity = vth;
@@ -272,7 +244,11 @@ public:
   void updateSpeeds(int left_speed, int right_speed){
     boost::mutex::scoped_lock lock(claw_mutex_);
     try{
-      claw->SpeedM1M2(address, right_speed, left_speed);
+      if (robot_dir){
+      	claw->SpeedAccelM1M2(address, max_accel_qpps, left_speed, right_speed);
+      } else {
+	claw->SpeedAccelM1M2(address, max_accel_qpps, right_speed, left_speed);
+      }
     }  catch(USBSerial::Exception &e) {
       ROS_WARN("Error setting motor speeds (error=%s)", e.what());
       serial_error();
@@ -319,8 +295,8 @@ public:
     double ang = msg.angular.z;
     double left = 1.0 * lin - ang * base_width / 2.0;
     double right = 1.0 * lin + ang * base_width / 2.0;
-    target_left_qpps = left * ticks_per_m * left_dir;
-    target_right_qpps = right * ticks_per_m * right_dir;
+    target_left_qpps = left * ticks_per_m;
+    target_right_qpps = right * ticks_per_m;
  }
  void shutdown(){
 
@@ -353,10 +329,6 @@ private:
   int update_rate;
   double base_width;
   double ticks_per_m;
-  double KP;
-  double KI;
-  double KD;
-  int QPPS;
   std::string base_frame_id;
   ros::Time last_motor;
   boost::scoped_ptr<RoboClaw> claw;
@@ -375,7 +347,9 @@ private:
   sensor_msgs::JointState js;
   ros::ServiceServer calib_server;
   int serial_errs;
-  int left_dir, right_dir;
+  int robot_dir;
+  double max_accel;
+  int max_accel_qpps;
 };
 
 

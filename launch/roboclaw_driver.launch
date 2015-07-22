@@ -1,11 +1,14 @@
 <launch>
-   <node name="roboclaw_driver" pkg="roboclaw_driver" type="roboclaw_driver" output="screen" launch-prefix="gdb -ex run --args">
-		<param name="port" value="/dev/ttyACM0" />
+   <node name="roboclaw_driver" pkg="roboclaw_driver" type="roboclaw_driver" output="screen" >
+		<param name="port" value="/dev/emet/roboclaw" />
 		<param name="baud_rate" value="1000000" />
 		<param name="rate" value="30" />
-		<param name="base_width" value="0.195" />
-		<param name="ticks_per_metre" value="165.786" />
+		<param name="base_width" value="0.314" />
+		<param name="ticks_per_metre" value="21738" />
 		<param name="base_frame_id" value="base_link" />	
-		<param name="timeout" value="20" />
+		<param name="robot_direction" value="1" />
+		<param name="max_acceleration" value="0.5" />
+
+		
    </node>
 </launch>
