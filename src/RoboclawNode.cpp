@@ -59,6 +59,16 @@ public:
         right_dir = 1;
       }   
 
+    if(!priv_nh.getParam("last_odom_x", x)){
+      x=0.0;
+    }
+    if(!priv_nh.getParam("last_odom_y", y)){
+      y=0.0;
+    }
+    if(!priv_nh.getParam("last_odom_theta", theta)){
+      theta=0.0;
+    }
+    
     ROS_INFO_STREAM("Starting roboclaw node with params:");
     ROS_INFO_STREAM("Port:\t" << port);
     ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
@@ -69,6 +79,9 @@ public:
     ROS_INFO_STREAM("KD:\t" << KD);
     ROS_INFO_STREAM("QPPS:\t" << QPPS);
     ROS_INFO_STREAM("Robot Dir:\t" << robot_dir);
+    ROS_INFO_STREAM("X:\t" << x);
+    ROS_INFO_STREAM("Y:\t" << y);
+    ROS_INFO_STREAM("Theta:\t" << theta);
 
 
     serial_errs = 0;
@@ -101,6 +114,7 @@ public:
       claw->SetM2Constants(address,KD,KP,KI,QPPS);
       claw->ReadVersion(address, &roboclaw_version);
       ROS_INFO_STREAM("Connected to: " << roboclaw_version);
+      claw->ResetEncoders(address);
     } catch (USBSerial::Exception &e) {
       ROS_WARN("Problem setting PID constants (error=%s)", e.what());
       serial_error();
@@ -125,22 +139,27 @@ public:
     double check_every = 0.25;
     std::string last_msg;
     while (ros::ok()) {
-        try {
-          ser->Open(port.c_str());
-          ROS_INFO("Connected to %s", port.c_str());
-          break;
-        } catch (USBSerial::Exception &e) {
-          last_msg = e.what();
-        }
-        ros::Duration(check_every).sleep();
-        double dur = (ros::Time::now() - start).toSec();
-        if (dur > notify_every) {
-            ROS_WARN_THROTTLE(notify_every,
-                              "Haven't connected to %s in %.2f seconds."
-                              "  Last error=\n%s",
-                              port.c_str(), dur, last_msg.c_str());
-          }
+      try {
+	ser->Open(port.c_str());
+	ROS_INFO("Connected to %s", port.c_str());
+	break;
+      } catch (USBSerial::Exception &e) {
+	last_msg = e.what();
       }
+      ros::Duration(check_every).sleep();
+      double dur = (ros::Time::now() - start).toSec();
+      if (dur > notify_every) {
+	ROS_WARN_THROTTLE(notify_every,
+			  "Haven't connected to %s in %.2f seconds."
+			  "  Last error=\n%s",
+			  port.c_str(), dur, last_msg.c_str());
+      }
+      ROS_INFO_STREAM("X:\t" << x);
+      ROS_INFO_STREAM("Y:\t" << y);
+      ROS_INFO_STREAM("Theta:\t" << theta);
+
+      publishTf();
+    }
   }
 
   void serial_error() {
@@ -168,7 +187,7 @@ public:
     return true;
   }
 
-  void upateOdom(){
+  void updateOdom(){
 
     boost::mutex::scoped_lock lock(claw_mutex_);
 
@@ -198,7 +217,7 @@ public:
       return;
     }
    if (valid) {
-        encoder_left = counts;
+        encoder_left = -left_dir * counts;
       } else {
         ROS_INFO("M1 valid: %d, status: %d", valid, status);
 	ROS_WARN("Invalid data from motor 1");
@@ -216,7 +235,7 @@ public:
 
 
   if (valid) {
-        encoder_right = counts;
+        encoder_right = -right_dir * counts;
       } else {
         ROS_INFO("M1 valid: %d, status: %d", valid, status);
 	ROS_WARN("Invalid data from motor 1");
@@ -231,8 +250,8 @@ public:
         dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
 
     } else {
-    	dist_left = (float)(encoder_left - last_enc_left) / ticks_per_m;
-    	dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
+    	dist_right = (float)(encoder_left - last_enc_left) / ticks_per_m;
+    	dist_left = (float)(encoder_right - last_enc_right) / ticks_per_m;
 
     }
 
@@ -259,6 +278,10 @@ public:
 	theta += delta_th;
    }
 
+  }
+
+  void publishTf() {
+    ros::Time now = ros::Time::now();
 
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(x,y,0.0));
@@ -278,7 +301,7 @@ public:
     odom.twist.twist.angular.z = vth;
     odom_pub.publish(odom);
 
-    js.header.stamp = ros::Time::now();
+    js.header.stamp = now;
     joint_pub.publish(js);
   }
 
@@ -353,10 +376,14 @@ public:
         if (ros::Time::now() > (last_motor + ros::Duration(TWIST_CMD_TIMEOUT))){
             target_left_qpps = target_right_qpps = 0;
           }
-        this->upateOdom();
+        this->updateOdom();
+	this->publishTf();
         this->updateSpeeds(target_left_qpps, target_right_qpps);
         r.sleep();
       }
+    priv_nh.setParam("last_odom_x", x);
+    priv_nh.setParam("last_odom_y", y);
+    priv_nh.setParam("last_odom_theta", theta);
     this->updateSpeeds(0, 0);
   }
 
