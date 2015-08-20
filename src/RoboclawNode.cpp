@@ -16,425 +16,414 @@
 #define TWIST_CMD_TIMEOUT 3.0
 #define MAX_ERRORS 5
 
-class RoboclawNode{
+class RoboclawNode {
 public:
-  RoboclawNode(): nh(), priv_nh("~") {
-    boost::mutex::scoped_lock lock(claw_mutex_);
-    priv_nh.param<std::string>("port", port, "/dev/roboclaw");
-    priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_footprint");
-    if(!priv_nh.getParam("baud_rate", baud_rate)){
-        baud_rate = 1000000;
-      }
-    if(!priv_nh.getParam("rate", update_rate)){
-        update_rate = 20;
-      }
-    if(!priv_nh.getParam("base_width", base_width)){
-        base_width = 0.265;
-      }
-    if(!priv_nh.getParam("ticks_per_metre", ticks_per_m)){
-        ticks_per_m = 21738;
-      }
-    if(!priv_nh.getParam("robot_direction", robot_dir)){
-        robot_dir = 0;
-    }
-    if(!priv_nh.getParam("max_acceleration", max_accel)){
-        max_accel = 1.0;
-    }
-   if(!priv_nh.getParam("KP", KP)){
-        KP = 0.1;
-      }
-    if(!priv_nh.getParam("KI", KI)){
-        KI = 0.5;
-      }
-    if(!priv_nh.getParam("KD", KD)){
-        KD = 0.25;
-      }
-    if(!priv_nh.getParam("QPPS", QPPS)){
-        QPPS = 11600;
-      }
-    if(!priv_nh.getParam("left_motor_direction", left_dir)){
-        left_dir = 1;
-      }
-    if(!priv_nh.getParam("right_motor_direction", right_dir)){
-        right_dir = 1;
-      }   
+    RoboclawNode() : nh(), priv_nh("~") {
+        boost::mutex::scoped_lock lock(claw_mutex_);
+        priv_nh.param<std::string>("port", port, "/dev/roboclaw");
+        priv_nh.param<std::string>("base_frame_id", base_frame_id, "base_footprint");
+        if (!priv_nh.getParam("baud_rate", baud_rate)) {
+            baud_rate = 1000000;
+        }
+        if (!priv_nh.getParam("rate", update_rate)) {
+            update_rate = 20;
+        }
+        if (!priv_nh.getParam("base_width", base_width)) {
+            base_width = 0.265;
+        }
+        if (!priv_nh.getParam("ticks_per_metre", ticks_per_m)) {
+            ticks_per_m = 21738;
+        }
+        if (!priv_nh.getParam("robot_direction", robot_dir)) {
+            robot_dir = 0;
+        }
+        if (!priv_nh.getParam("max_acceleration", max_accel)) {
+            max_accel = 1.0;
+        }
+        if (!priv_nh.getParam("KP", KP)) {
+            KP = 0.1;
+        }
+        if (!priv_nh.getParam("KI", KI)) {
+            KI = 0.5;
+        }
+        if (!priv_nh.getParam("KD", KD)) {
+            KD = 0.25;
+        }
+        if (!priv_nh.getParam("QPPS", QPPS)) {
+            QPPS = 11600;
+        }
+        if (!priv_nh.getParam("left_motor_direction", left_dir)) {
+            left_dir = 1;
+        }
+        if (!priv_nh.getParam("right_motor_direction", right_dir)) {
+            right_dir = 1;
+        }
 
-    if(!priv_nh.getParam("last_odom_x", x)){
-      x=0.0;
-    }
-    if(!priv_nh.getParam("last_odom_y", y)){
-      y=0.0;
-    }
-    if(!priv_nh.getParam("last_odom_theta", theta)){
-      theta=0.0;
-    }
-    
-    ROS_INFO_STREAM("Starting roboclaw node with params:");
-    ROS_INFO_STREAM("Port:\t" << port);
-    ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
-    ROS_INFO_STREAM("Base Width:\t" << base_width);
-    ROS_INFO_STREAM("Ticks Per Metre:\t" << ticks_per_m);
-    ROS_INFO_STREAM("KP:\t" << KP);
-    ROS_INFO_STREAM("KI:\t" << KI);
-    ROS_INFO_STREAM("KD:\t" << KD);
-    ROS_INFO_STREAM("QPPS:\t" << QPPS);
-    ROS_INFO_STREAM("Robot Dir:\t" << robot_dir);
-    ROS_INFO_STREAM("X:\t" << x);
-    ROS_INFO_STREAM("Y:\t" << y);
-    ROS_INFO_STREAM("Theta:\t" << theta);
+        if (!priv_nh.getParam("last_odom_x", x)) {
+            x = 0.0;
+        }
+        if (!priv_nh.getParam("last_odom_y", y)) {
+            y = 0.0;
+        }
+        if (!priv_nh.getParam("last_odom_theta", theta)) {
+            theta = 0.0;
+        }
 
+        ROS_INFO_STREAM("Starting roboclaw node with params:");
+        ROS_INFO_STREAM("Port:\t" << port);
+        ROS_INFO_STREAM("Baud rate:\t" << baud_rate);
+        ROS_INFO_STREAM("Base Width:\t" << base_width);
+        ROS_INFO_STREAM("Ticks Per Metre:\t" << ticks_per_m);
+        ROS_INFO_STREAM("KP:\t" << KP);
+        ROS_INFO_STREAM("KI:\t" << KI);
+        ROS_INFO_STREAM("KD:\t" << KD);
+        ROS_INFO_STREAM("QPPS:\t" << QPPS);
+        ROS_INFO_STREAM("Robot Dir:\t" << robot_dir);
+        ROS_INFO_STREAM("X:\t" << x);
+        ROS_INFO_STREAM("Y:\t" << y);
+        ROS_INFO_STREAM("Theta:\t" << theta);
 
-    serial_errs = 0;
-    ser.reset(new USBSerial());
-    open_usb();
-    claw.reset(new RoboClaw(ser.get()));
-
-
-    max_accel_qpps = max_accel * ticks_per_m;
-    last_motor = ros::Time::now();
-    target_left_qpps = target_right_qpps = 0;
-    vx = vth = 0;
-    last_odom  = ros::Time::now();
-    last_enc_left = last_enc_right = 0;
-
-    quaternion.x = 0.0;
-    quaternion.y = 0.0;
-
-    odom.header.frame_id = "odom";
-    odom.child_frame_id = base_frame_id;
-    odom.pose.pose.position.z = 0.0;
-
-    cmd_vel_sub = nh.subscribe("cmd_vel", 1, &RoboclawNode::twistCb, this);
-    odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
-    joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
-    state_pub = nh.advertise<roboclaw_driver::RoboClawState>("roboclaw_state", 1);
-
-    try{
-      claw->SetM1Constants(address,KD,KP,KI,QPPS);
-      claw->SetM2Constants(address,KD,KP,KI,QPPS);
-      claw->ReadVersion(address, &roboclaw_version);
-      ROS_INFO_STREAM("Connected to: " << roboclaw_version);
-      claw->ResetEncoders(address);
-    } catch (USBSerial::Exception &e) {
-      ROS_WARN("Problem setting PID constants (error=%s)", e.what());
-      serial_error();
-    }
-
-    js.name.push_back("base_l_wheel_joint");
-    js.name.push_back("base_r_wheel_joint");
-    js.position.push_back(0.0);
-    js.position.push_back(0.0);
-    js.effort.push_back(0.0);
-    js.effort.push_back(0.0);
-    js.header.frame_id = "base_link";
-
-    calib_server = nh.advertiseService("motor_calibrate", &RoboclawNode::calib_callback, this);
-
-  }
-
-  void open_usb() {
-    ROS_INFO("Connecting to %s...", port.c_str());
-    ros::Time start = ros::Time::now();
-    double notify_every = 10.0;
-    double check_every = 0.25;
-    std::string last_msg;
-    while (ros::ok()) {
-      try {
-	ser->Open(port.c_str());
-	ROS_INFO("Connected to %s", port.c_str());
-	break;
-      } catch (USBSerial::Exception &e) {
-	last_msg = e.what();
-      }
-      ros::Duration(check_every).sleep();
-      double dur = (ros::Time::now() - start).toSec();
-      if (dur > notify_every) {
-	ROS_WARN_THROTTLE(notify_every,
-			  "Haven't connected to %s in %.2f seconds."
-			  "  Last error=\n%s",
-			  port.c_str(), dur, last_msg.c_str());
-      }
-      ROS_INFO_STREAM("X:\t" << x);
-      ROS_INFO_STREAM("Y:\t" << y);
-      ROS_INFO_STREAM("Theta:\t" << theta);
-
-      publishTf();
-    }
-  }
-
-  void serial_error() {
-    serial_errs += 1;
-    if (serial_errs == MAX_ERRORS) {
-        ROS_ERROR("Several errors from roboclaw, restarting");
-        roboclaw_restart_usb();
-        open_usb();
         serial_errs = 0;
-      }
-  }
+        ser.reset(new USBSerial());
+        open_usb();
+        claw.reset(new RoboClaw(ser.get()));
 
-  bool calib_callback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response){
-    ROS_INFO_STREAM("calibrating motors");
-    ros::Duration wait(1.0);
-    geometry_msgs::Twist calib;
-    calib.angular.z = 0.3;
-    this->twistCb(calib);
-    wait.sleep();
-    calib.angular.z = -0.3;
-    this->twistCb(calib);
-    wait.sleep();
-    calib.angular.z = 0.0;
-    this->twistCb(calib);
-    return true;
-  }
+        max_accel_qpps = (int) (max_accel * ticks_per_m);
+        last_motor = ros::Time::now();
+        target_left_qpps = target_right_qpps = 0;
+        vx = vth = 0;
+        last_odom = ros::Time::now();
+        last_enc_left = last_enc_right = 0;
 
-  void updateOdom(){
+        quaternion.x = 0.0;
+        quaternion.y = 0.0;
 
-    boost::mutex::scoped_lock lock(claw_mutex_);
+        odom.header.frame_id = "odom";
+        odom.child_frame_id = base_frame_id;
+        odom.pose.pose.position.z = 0.0;
 
-    ros::Time now = ros::Time::now();
-    double dt = (now-last_odom).toSec();
+        cmd_vel_sub = nh.subscribe("cmd_vel", 1, &RoboclawNode::twistCb, this);
+        odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
+        joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
+        state_pub = nh.advertise<roboclaw_driver::RoboClawState>("roboclaw_state", 1);
 
-    if(dt > 10.0) {
+        try {
+            claw->SetM1Constants(address, KD, KP, KI, QPPS);
+            claw->SetM2Constants(address, KD, KP, KI, QPPS);
+            claw->ReadVersion(address, &roboclaw_version);
+            ROS_INFO_STREAM("Connected to: " << roboclaw_version);
+            claw->ResetEncoders(address);
+        } catch (USBSerial::Exception &e) {
+            ROS_WARN("Problem setting PID constants (error=%s)", e.what());
+            serial_error();
+        }
+
+        js.name.push_back("base_l_wheel_joint");
+        js.name.push_back("base_r_wheel_joint");
+        js.position.push_back(0.0);
+        js.position.push_back(0.0);
+        js.effort.push_back(0.0);
+        js.effort.push_back(0.0);
+        js.header.frame_id = "base_link";
+
+        calib_server = nh.advertiseService("motor_calibrate", &RoboclawNode::calib_callback, this);
+
+    }
+
+    void open_usb() {
+        ROS_INFO("Connecting to %s...", port.c_str());
+        ros::Time start = ros::Time::now();
+        double notify_every = 10.0;
+        double check_every = 0.25;
+        std::string last_msg;
+        while (ros::ok()) {
+            try {
+                ser->Open(port.c_str());
+                ROS_INFO("Connected to %s", port.c_str());
+                break;
+            } catch (USBSerial::Exception &e) {
+                last_msg = e.what();
+            }
+            ros::Duration(check_every).sleep();
+            double dur = (ros::Time::now() - start).toSec();
+            if (dur > notify_every) {
+                ROS_WARN_THROTTLE(notify_every,
+                                  "Haven't connected to %s in %.2f seconds."
+                                          "  Last error=\n%s",
+                                  port.c_str(), dur, last_msg.c_str());
+            }
+            publishTf();
+        }
+    }
+
+    void serial_error() {
+        serial_errs += 1;
+        if (serial_errs == MAX_ERRORS) {
+            ROS_ERROR("Several errors from roboclaw, restarting");
+            roboclaw_restart_usb();
+            open_usb();
+            serial_errs = 0;
+        }
+    }
+
+    bool calib_callback(std_srvs::Empty::Request &request, std_srvs::Empty::Response &response) {
+        ROS_INFO_STREAM("calibrating motors");
+        ros::Duration wait(1.0);
+        geometry_msgs::Twist calib;
+        calib.angular.z = 0.3;
+        this->twistCb(calib);
+        wait.sleep();
+        calib.angular.z = -0.3;
+        this->twistCb(calib);
+        wait.sleep();
+        calib.angular.z = 0.0;
+        this->twistCb(calib);
+        return true;
+    }
+
+    void updateOdom() {
+
+        boost::mutex::scoped_lock lock(claw_mutex_);
+
+        ros::Time now = ros::Time::now();
+        double dt = (now - last_odom).toSec();
+
+        if (dt > 10.0) {
+            last_odom = now;
+            return;
+        }
+
         last_odom = now;
-        return;
-      }
-
-    last_odom = now;
 
 
-    uint8_t status;
-    int32_t speed;
-    bool valid;
-    int32_t left_qpps, right_qpps = 0;
+        uint8_t status;
+        int32_t speed;
+        bool valid;
+        int32_t left_qpps, right_qpps = 0;
 
-    int32_t encoder_left, encoder_right;
-    int32_t counts;
-    try {
-	counts = claw->ReadEncM1(address, &status, &valid);
-    } catch (USBSerial::Exception &e) {
-      ROS_WARN("Problem reading motor 1 speed (error=%s)", e.what());
-      serial_error();
-      return;
-    }
-   if (valid) {
-        encoder_left = -left_dir * counts;
-      } else {
-        ROS_INFO("M1 valid: %d, status: %d", valid, status);
-	ROS_WARN("Invalid data from motor 1");
-        serial_error();
-        return;
-      }
+        int32_t encoder_left, encoder_right;
+        int32_t counts;
+        try {
+            counts = claw->ReadEncM1(address, &status, &valid);
+        } catch (USBSerial::Exception &e) {
+            ROS_WARN("Problem reading motor 1 speed (error=%s)", e.what());
+            serial_error();
+            return;
+        }
+        if (valid) {
+            encoder_left = -left_dir * counts;
+        } else {
+            ROS_INFO("M1 valid: %d, status: %d", valid, status);
+            ROS_WARN("Invalid data from motor 1");
+            serial_error();
+            return;
+        }
 
-    try {
-        counts = claw->ReadEncM2(address, &status, &valid);
-    } catch (USBSerial::Exception &e) {
-      ROS_WARN("Problem reading motor 1 speed (error=%s)", e.what());
-      serial_error();
-      return;
-    }
-
-
-  if (valid) {
-        encoder_right = -right_dir * counts;
-      } else {
-        ROS_INFO("M1 valid: %d, status: %d", valid, status);
-	ROS_WARN("Invalid data from motor 1");
-        serial_error();
-        return;
-      }
-
-    double dist_left, dist_right = 0.0;
-
-    if (robot_dir){
-        dist_left = (float)(encoder_left - last_enc_left) / ticks_per_m;
-        dist_right = (float)(encoder_right - last_enc_right) / ticks_per_m;
-
-    } else {
-    	dist_right = (float)(encoder_left - last_enc_left) / ticks_per_m;
-    	dist_left = (float)(encoder_right - last_enc_right) / ticks_per_m;
-
-    }
-
-    last_enc_left = encoder_left;
-    last_enc_right = encoder_right;
+        try {
+            counts = claw->ReadEncM2(address, &status, &valid);
+        } catch (USBSerial::Exception &e) {
+            ROS_WARN("Problem reading motor 1 speed (error=%s)", e.what());
+            serial_error();
+            return;
+        }
 
 
-    // distance robot has travelled is the average of the distance travelled by both
-    // wheels
-    double dist_travelled = (dist_left + dist_right) / 2;
-    // calculate appoximate heading change (radians), this works for small angles
-    double delta_th = (dist_right - dist_left) / base_width;
-    vx = dist_travelled / dt;
-    vth = delta_th / dt;
+        if (valid) {
+            encoder_right = -right_dir * counts;
+        } else {
+            ROS_INFO("M1 valid: %d, status: %d", valid, status);
+            ROS_WARN("Invalid data from motor 1");
+            serial_error();
+            return;
+        }
 
-    if (dist_travelled != 0){
-        double delta_x = cos(delta_th) * dist_travelled;
-	double delta_y = -sin(delta_th) * dist_travelled;
-	x += (cos(theta) * delta_x - sin(theta) * delta_y);
-	y += (sin(theta) * delta_x + cos(theta) * delta_y);
-    }
+        double dist_left, dist_right = 0.0;
 
-   if (delta_th != 0){
-	theta += delta_th;
-   }
+        if (robot_dir) {
+            dist_left = (float) (encoder_left - last_enc_left) / ticks_per_m;
+            dist_right = (float) (encoder_right - last_enc_right) / ticks_per_m;
 
-  }
+        } else {
+            dist_right = (float) (encoder_left - last_enc_left) / ticks_per_m;
+            dist_left = (float) (encoder_right - last_enc_right) / ticks_per_m;
 
-  void publishTf() {
-    ros::Time now = ros::Time::now();
+        }
 
-    tf::Transform transform;
-    transform.setOrigin(tf::Vector3(x,y,0.0));
-    tf::Quaternion q;
-    q.setRPY(0.0,0.0,theta);
-    transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, now, "odom", base_frame_id));
+        last_enc_left = encoder_left;
+        last_enc_right = encoder_right;
 
-    odom.header.stamp = now;
-    odom.header.frame_id = "odom";
-    odom.pose.pose.position.x = x;
-    odom.pose.pose.position.y = y;
-    odom.pose.pose.orientation.x = odom.pose.pose.orientation.y = 0;
-    odom.pose.pose.orientation.z = sin(theta/2);
-    odom.pose.pose.orientation.w = cos(theta/2);
-    odom.twist.twist.linear.x = vx;
-    odom.twist.twist.angular.z = vth;
-    odom_pub.publish(odom);
 
-    js.header.stamp = now;
-    joint_pub.publish(js);
-  }
+        // distance robot has travelled is the average of the distance travelled by both
+        // wheels
+        double dist_travelled = (dist_left + dist_right) / 2;
+        // calculate appoximate heading change (radians), this works for small angles
+        double delta_th = (dist_right - dist_left) / base_width;
+        vx = dist_travelled / dt;
+        vth = delta_th / dt;
 
-  void updateSpeeds(int left_speed, int right_speed){
-    boost::mutex::scoped_lock lock(claw_mutex_);
-    try{
-      if (robot_dir){
-      	claw->SpeedAccelM1M2(address, max_accel_qpps, left_speed, right_speed);
-      } else {
-	claw->SpeedAccelM1M2(address, max_accel_qpps, right_speed, left_speed);
-      }
-    }  catch(USBSerial::Exception &e) {
-      ROS_WARN("Error setting motor speeds (error=%s)", e.what());
-      serial_error();
-      return;
+        if (dist_travelled != 0) {
+            double delta_x = cos(delta_th) * dist_travelled;
+            double delta_y = -sin(delta_th) * dist_travelled;
+            x += (cos(theta) * delta_x - sin(theta) * delta_y);
+            y += (sin(theta) * delta_x + cos(theta) * delta_y);
+        }
+
+        if (delta_th != 0) {
+            theta += delta_th;
+        }
+
     }
 
-  }
+    void publishTf() {
+        ros::Time now = ros::Time::now();
 
-  void updateState(){
-    boost::mutex::scoped_lock lock(claw_mutex_);
+        tf::Transform transform;
+        transform.setOrigin(tf::Vector3(x, y, 0.0));
+        tf::Quaternion q;
+        q.setRPY(0.0, 0.0, theta);
+        transform.setRotation(q);
+        br.sendTransform(tf::StampedTransform(transform, now, "odom", base_frame_id));
 
-    bool valid = false;
-    try{
-      double battery = 0.0;
-      battery = claw->ReadMainBatteryVoltage(address, &valid);
-      if (valid){
-          state.battery_voltage = (double)battery/10.0;
-      }
-    }  catch(USBSerial::Exception &e) {
-      ROS_WARN("Error reading battery voltage (error=%s)", e.what());
-      serial_error();
-      return;
+        odom.header.stamp = now;
+        odom.header.frame_id = "odom";
+        odom.pose.pose.position.x = x;
+        odom.pose.pose.position.y = y;
+        odom.pose.pose.orientation.x = odom.pose.pose.orientation.y = 0;
+        odom.pose.pose.orientation.z = sin(theta / 2);
+        odom.pose.pose.orientation.w = cos(theta / 2);
+        odom.twist.twist.linear.x = vx;
+        odom.twist.twist.angular.z = vth;
+        odom_pub.publish(odom);
+
+        js.header.stamp = now;
+        joint_pub.publish(js);
     }
 
-    try{
-      int16_t m1cur, m2cur;
-      valid = claw->ReadCurrents(address, m1cur, m2cur);
-      if (valid){
-          state.left_motor_current = (double)m1cur/100.0;
-          state.right_motor_current = (double)m2cur/100.0;
-      }
-    }  catch(USBSerial::Exception &e) {
-      ROS_WARN("Error reading motor currents (error=%s)", e.what());
-      serial_error();
-      return;
+    void updateSpeeds(int left_speed, int right_speed) {
+        boost::mutex::scoped_lock lock(claw_mutex_);
+        try {
+            if (robot_dir) {
+                claw->SpeedAccelM1M2(address, max_accel_qpps, left_speed, right_speed);
+            } else {
+                claw->SpeedAccelM1M2(address, max_accel_qpps, right_speed, left_speed);
+            }
+        } catch (USBSerial::Exception &e) {
+            ROS_WARN("Error setting motor speeds (error=%s)", e.what());
+            serial_error();
+            return;
+        }
+
     }
-    state_pub.publish(state);
-    last_state = ros::Time::now();
-  }
 
-  void twistCb(geometry_msgs::Twist msg){
-    last_motor = ros::Time::now();
-    double lin = msg.linear.x;
-    double ang = msg.angular.z;
-    double left = 1.0 * lin - ang * base_width / 2.0;
-    double right = 1.0 * lin + ang * base_width / 2.0;
-    target_left_qpps = left * ticks_per_m * left_dir;
-    target_right_qpps = right * ticks_per_m * right_dir;
- }
- void shutdown(){
+    void updateState() {
+        boost::mutex::scoped_lock lock(claw_mutex_);
 
-  }
+        bool valid = false;
+        try {
+            double battery = 0.0;
+            battery = claw->ReadMainBatteryVoltage(address, &valid);
+            if (valid) {
+                state.battery_voltage = battery / 10.0;
+            }
+        } catch (USBSerial::Exception &e) {
+            ROS_WARN("Error reading battery voltage (error=%s)", e.what());
+            serial_error();
+            return;
+        }
 
-  void spin(){
-    ros::Rate r(update_rate);
-    while (ros::ok()){
-        ros::spinOnce();
-        if (ros::Time::now() > (last_state + ros::Duration(DIAGNOSTICS_DELAY))){
-            this->updateState();
-          }
-        if (ros::Time::now() > (last_motor + ros::Duration(TWIST_CMD_TIMEOUT))){
-            target_left_qpps = target_right_qpps = 0;
-          }
-        this->updateOdom();
-	this->publishTf();
-        this->updateSpeeds(target_left_qpps, target_right_qpps);
-        r.sleep();
-      }
-    priv_nh.setParam("last_odom_x", x);
-    priv_nh.setParam("last_odom_y", y);
-    priv_nh.setParam("last_odom_theta", theta);
-    this->updateSpeeds(0, 0);
-  }
+        try {
+            int16_t m1cur, m2cur;
+            valid = claw->ReadCurrents(address, m1cur, m2cur);
+            if (valid) {
+                state.left_motor_current = (double) m1cur / 100.0;
+                state.right_motor_current = (double) m2cur / 100.0;
+            }
+        } catch (USBSerial::Exception &e) {
+            ROS_WARN("Error reading motor currents (error=%s)", e.what());
+            serial_error();
+            return;
+        }
+        state_pub.publish(state);
+        last_state = ros::Time::now();
+    }
+
+    void twistCb(geometry_msgs::Twist msg) {
+        last_motor = ros::Time::now();
+        double lin = msg.linear.x;
+        double ang = msg.angular.z;
+        double left = 1.0 * lin - ang * base_width / 2.0;
+        double right = 1.0 * lin + ang * base_width / 2.0;
+        target_left_qpps = left * ticks_per_m * left_dir;
+        target_right_qpps = right * ticks_per_m * right_dir;
+    }
+
+    void spin() {
+        ros::Rate r(update_rate);
+        while (ros::ok()) {
+            ros::spinOnce();
+            if (ros::Time::now() > (last_state + ros::Duration(DIAGNOSTICS_DELAY))) {
+                this->updateState();
+            }
+            if (ros::Time::now() > (last_motor + ros::Duration(TWIST_CMD_TIMEOUT))) {
+                target_left_qpps = target_right_qpps = 0;
+            }
+            this->updateOdom();
+            this->publishTf();
+            this->updateSpeeds(target_left_qpps, target_right_qpps);
+            r.sleep();
+        }
+        priv_nh.setParam("last_odom_x", x);
+        priv_nh.setParam("last_odom_y", y);
+        priv_nh.setParam("last_odom_theta", theta);
+        this->updateSpeeds(0, 0);
+    }
 
 
 private:
-  ros::NodeHandle nh, priv_nh;
-  ros::Subscriber cmd_vel_sub;
-  ros::Publisher odom_pub, joint_pub, state_pub;
-  std::string port;
-  int baud_rate;
-  int update_rate;
-  double base_width;
-  double ticks_per_m;
-  double KP;
-  double KI;
-  double KD;
-  int QPPS;
-  std::string base_frame_id;
-  ros::Time last_motor;
-  boost::scoped_ptr<RoboClaw> claw;
-  boost::scoped_ptr<USBSerial> ser;
-  boost::mutex claw_mutex_;
+    ros::NodeHandle nh, priv_nh;
+    ros::Subscriber cmd_vel_sub;
+    ros::Publisher odom_pub, joint_pub, state_pub;
+    std::string port;
+    int baud_rate;
+    int update_rate;
+    double base_width;
+    double ticks_per_m;
+    double KP;
+    double KI;
+    double KD;
+    int QPPS;
+    std::string base_frame_id;
+    ros::Time last_motor;
+    boost::scoped_ptr<RoboClaw> claw;
+    boost::scoped_ptr<USBSerial> ser;
+    boost::mutex claw_mutex_;
 
-  roboclaw_driver::RoboClawState state;
-  int target_left_qpps, target_right_qpps;
-  double x, y, theta, vx, vth;
-  long last_enc_left, last_enc_right;
-  ros::Time last_odom;
-  nav_msgs::Odometry odom;
-  geometry_msgs::Quaternion quaternion;
-  ros::Time last_state;
-  std::string roboclaw_version;
-  tf::TransformBroadcaster br;
-  sensor_msgs::JointState js;
-  ros::ServiceServer calib_server;
-  int serial_errs;
-  int left_dir, right_dir, robot_dir;
-  double max_accel;
-  int max_accel_qpps;
+    roboclaw_driver::RoboClawState state;
+    int target_left_qpps, target_right_qpps;
+    double x, y, theta, vx, vth;
+    long last_enc_left, last_enc_right;
+    ros::Time last_odom;
+    nav_msgs::Odometry odom;
+    geometry_msgs::Quaternion quaternion;
+    ros::Time last_state;
+    std::string roboclaw_version;
+    tf::TransformBroadcaster br;
+    sensor_msgs::JointState js;
+    ros::ServiceServer calib_server;
+    int serial_errs;
+    int left_dir, right_dir, robot_dir;
+    double max_accel;
+    int max_accel_qpps;
 };
 
 
-int main(int argc, char **argv){
-  ros::init(argc, argv, "roboclaw_driver");
-  try{
-    RoboclawNode node;
-    node.spin();
-  } catch (boost::system::system_error e){
-    std::cout << "\nError starting node: " << e.code() << " " << e.what() << std::endl;
-  }
-
-
-  return 0;
+int main(int argc, char **argv) {
+    ros::init(argc, argv, "roboclaw_driver");
+    try {
+        RoboclawNode node;
+        node.spin();
+    } catch (boost::system::system_error e) {
+        std::cout << "\nError starting node: " << e.code() << " " << e.what() << std::endl;
+    }
+    return 0;
 }
